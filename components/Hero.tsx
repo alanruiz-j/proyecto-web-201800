@@ -7,7 +7,7 @@ import Button from './Button';
 
 export default function Hero() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-white to-[var(--muted)] py-16 sm:py-24">
+    <section className="relative overflow-hidden bg-gradient-to-b from-white to-[var(--muted)] py-12 sm:py-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <motion.div
