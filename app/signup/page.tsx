@@ -71,6 +71,42 @@ export default function SignupPage() {
     setLoading(false);
   };
 
+  const handleEmailSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!formData.acceptTerms) {
+      setError('Debes aceptar los términos y condiciones');
+      return;
+    }
+    if (!formData.name || !formData.email || !formData.password) {
+      setError('Por favor completa todos los campos');
+      return;
+    }
+    if (passwordStrength < 5) {
+      setError('La contraseña no cumple todos los requisitos');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { createUserWithEmailAndPassword, updateProfile } = await import('firebase/auth');
+      const result = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+      await updateProfile(result.user, { displayName: formData.name });
+      router.push('/');
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      const messages: Record<string, string> = {
+        'auth/email-already-in-use': 'Este correo ya está registrado',
+        'auth/weak-password': 'La contraseña es muy débil',
+        'auth/invalid-email': 'El correo no es válido',
+      };
+      setError(messages[code ?? ''] ?? 'Error al crear la cuenta, intenta de nuevo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex">
       <motion.div
@@ -135,7 +171,7 @@ export default function SignupPage() {
               </div>
             )}
 
-            <div className="space-y-5">
+            <form onSubmit={handleEmailSignup} className="space-y-5">
               <Input
                 label="Nombre Completo"
                 type="text"
@@ -206,11 +242,11 @@ export default function SignupPage() {
                 </span>
               </label>
 
-              <Button type="button" size="lg" className="w-full" disabled={loading}>
+              <Button type="submit" size="lg" className="w-full" disabled={loading}>
                 Crear Cuenta
                 <ArrowRight className="ml-2" size={18} />
               </Button>
-            </div>
+            </form>
 
             <div className="relative my-8">
               <div className="absolute inset-0 flex items-center">

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, Menu, X, LogOut } from 'lucide-react';
 import Button from './Button';
+import { auth, logOut } from '../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 export default function Navbar() {
   const router = useRouter();
@@ -12,8 +14,10 @@ export default function Navbar() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    setIsAuthenticated(!!token);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+    });
+    return unsubscribe;
   }, []);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -28,9 +32,8 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem('authToken');
+  const handleLogout = async () => {
+    await logOut();
     router.push('/');
   };
 
