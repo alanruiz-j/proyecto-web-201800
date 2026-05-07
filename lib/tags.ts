@@ -11,3 +11,5 @@ export const TAG_COLORS: Record<string, string> = {
 
 export const tagColor = (tag: string) =>
   TAG_COLORS[tag] ?? 'bg-gray-100 text-gray-600';
+
+export const TAGS = Object.keys(TAG_COLORS);
