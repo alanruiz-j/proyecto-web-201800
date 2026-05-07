@@ -91,13 +91,10 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
       try {
         const q = query(collection(db, 'blogs', id, 'comments'), orderBy('createdAt', 'asc'));
         const snap = await getDocs(q);
-        setComments(snap.docs.map((d) => ({
-          id: d.id,
-          likedBy: [],
-          dislikedBy: [],
-          hidden: false,
-          ...(d.data() as Omit<Comment, 'id'>),
-        })));
+        setComments(snap.docs.map((d) => {
+          const { likedBy = [], dislikedBy = [], hidden = false, ...rest } = d.data() as Omit<Comment, 'id'>;
+          return { id: d.id, likedBy, dislikedBy, hidden, ...rest };
+        }));
       } catch (err) {
         console.error(err);
       }
