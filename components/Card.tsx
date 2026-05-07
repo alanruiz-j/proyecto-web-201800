@@ -11,10 +11,11 @@ interface CardProps {
   hover?: CardHover;
   className?: string;
   children?: ReactNode;
+  onClick?: () => void;
 }
 
 const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ className = '', variant = 'default', hover = false, children }, ref) => {
+  ({ className = '', variant = 'default', hover = false, children, onClick }, ref) => {
     const baseStyles = 'rounded-2xl bg-white transition-all duration-300';
     
     const variants: Record<CardVariant, string> = {
@@ -34,6 +35,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
         className={`${baseStyles} ${variants[variant]} ${hoverStyles} ${className}`}
+        onClick={onClick}
       >
         {children}
       </motion.div>
