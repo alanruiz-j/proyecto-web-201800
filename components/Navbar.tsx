@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Menu, X, LogOut } from 'lucide-react';
+import { Search, Menu, X, LogOut, BookOpen } from 'lucide-react';
 import Button from './Button';
 import { auth, logOut } from '../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -84,6 +84,14 @@ export default function Navbar() {
                       {userName && <p className="text-sm font-semibold text-[var(--foreground)] truncate">{userName}</p>}
                       {userEmail && <p className="text-xs text-[var(--muted-foreground)] truncate">{userEmail}</p>}
                     </div>
+                    <Link
+                      href="/mis-blogs"
+                      onClick={() => setDropdownOpen(false)}
+                      className="w-full px-4 py-2 text-left text-[var(--foreground)] hover:bg-[var(--muted)] flex items-center gap-2 transition-colors"
+                    >
+                      <BookOpen size={16} />
+                      Mis Blogs
+                    </Link>
                     <button
                       onClick={handleLogout}
                       className="w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
@@ -139,6 +147,13 @@ export default function Navbar() {
                     {userName && <p className="text-sm font-semibold text-[var(--foreground)] truncate">{userName}</p>}
                     {userEmail && <p className="text-xs text-[var(--muted-foreground)] truncate">{userEmail}</p>}
                   </div>
+                  <Link
+                    href="/mis-blogs"
+                    className="w-full px-4 py-2 text-[var(--foreground)] bg-[var(--muted)] rounded-full flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <BookOpen size={16} />
+                    Mis Blogs
+                  </Link>
                   <button
                     onClick={handleLogout}
                     className="w-full px-4 py-2 text-red-600 bg-red-50 rounded-full flex items-center justify-center gap-2 transition-colors"

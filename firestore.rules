@@ -5,10 +5,15 @@ service cloud.firestore {
     match /blogs/{blogId} {
       allow read: if true;
       allow create: if request.auth != null;
+      allow delete: if request.auth != null && request.auth.uid == resource.data.authorId;
 
       match /comments/{commentId} {
         allow read: if true;
         allow create: if request.auth != null;
+        allow delete: if request.auth != null && request.auth.uid == resource.data.authorId;
+        // Blog author can hide/show comments (only the hidden field)
+        allow update: if request.auth != null &&
+          get(/databases/$(database)/documents/blogs/$(blogId)).data.authorId == request.auth.uid;
       }
     }
   }

@@ -2,24 +2,28 @@
 
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   doc,
   getDoc,
   collection,
   getDocs,
   addDoc,
+  deleteDoc,
+  updateDoc,
   orderBy,
   query,
   serverTimestamp,
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '../../../lib/firebase';
-import { ArrowLeft, Tag, Clock, MessageCircle, Send } from 'lucide-react';
+import { ArrowLeft, Tag, Clock, MessageCircle, Send, Trash2, EyeOff, Eye } from 'lucide-react';
 
 interface BlogPost {
   title: string;
   body: string;
   tags: string[];
+  authorId: string;
   authorName: string;
   createdAt: { seconds: number } | null;
 }
@@ -27,12 +31,15 @@ interface BlogPost {
 interface Comment {
   id: string;
   content: string;
+  authorId: string;
   authorName: string;
+  hidden: boolean;
   createdAt: { seconds: number } | null;
 }
 
 export default function BlogDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
 
   const [post, setPost] = useState<BlogPost | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -40,6 +47,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
   const [newComment, setNewComment] = useState('');
   const [loadingPost, setLoadingPost] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingBlog, setDeletingBlog] = useState(false);
   const [error, setError] = useState('');
   const [commentError, setCommentError] = useState('');
 
@@ -51,12 +59,8 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     const fetchPost = async () => {
       try {
-        const docRef = doc(db, 'blogs', id);
-        const snap = await getDoc(docRef);
-        if (!snap.exists()) {
-          setError('Blog no encontrado.');
-          return;
-        }
+        const snap = await getDoc(doc(db, 'blogs', id));
+        if (!snap.exists()) { setError('Blog no encontrado.'); return; }
         setPost(snap.data() as BlogPost);
       } catch (err) {
         console.error(err);
@@ -68,14 +72,9 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
 
     const fetchComments = async () => {
       try {
-        const q = query(
-          collection(db, 'blogs', id, 'comments'),
-          orderBy('createdAt', 'asc')
-        );
+        const q = query(collection(db, 'blogs', id, 'comments'), orderBy('createdAt', 'asc'));
         const snap = await getDocs(q);
-        setComments(
-          snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Comment, 'id'>) }))
-        );
+        setComments(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Comment, 'id'>) })));
       } catch (err) {
         console.error(err);
       }
@@ -85,27 +84,56 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
     fetchComments();
   }, [id]);
 
+  const isAuthor = user && post && user.uid === post.authorId;
+
+  const handleDeleteBlog = async () => {
+    if (!confirm('¿Eliminar este blog? Esta acción no se puede deshacer.')) return;
+    setDeletingBlog(true);
+    try {
+      await deleteDoc(doc(db, 'blogs', id));
+      router.push('/feed');
+    } catch (err) {
+      console.error(err);
+      setDeletingBlog(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      await deleteDoc(doc(db, 'blogs', id, 'comments', commentId));
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleToggleHidden = async (comment: Comment) => {
+    try {
+      await updateDoc(doc(db, 'blogs', id, 'comments', comment.id), {
+        hidden: !comment.hidden,
+      });
+      setComments((prev) =>
+        prev.map((c) => (c.id === comment.id ? { ...c, hidden: !c.hidden } : c))
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleComment = async () => {
     if (!newComment.trim()) return;
     setSubmitting(true);
     setCommentError('');
     try {
-      const commentData = {
+      const data = {
         content: newComment.trim(),
         authorId: user!.uid,
         authorName: user!.displayName || user!.email || 'Anónimo',
+        hidden: false,
         createdAt: serverTimestamp(),
       };
-      const ref = await addDoc(collection(db, 'blogs', id, 'comments'), commentData);
-      setComments((prev) => [
-        ...prev,
-        {
-          id: ref.id,
-          content: commentData.content,
-          authorName: commentData.authorName,
-          createdAt: null,
-        },
-      ]);
+      const ref = await addDoc(collection(db, 'blogs', id, 'comments'), data);
+      setComments((prev) => [...prev, { id: ref.id, ...data, createdAt: null }]);
       setNewComment('');
     } catch (err) {
       console.error(err);
@@ -118,11 +146,13 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
   const formatDate = (ts: { seconds: number } | null) => {
     if (!ts) return 'Justo ahora';
     return new Date(ts.seconds * 1000).toLocaleDateString('es-MX', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+      year: 'numeric', month: 'long', day: 'numeric',
     });
   };
+
+  const visibleComments = comments.filter((c) => !c.hidden);
+  const hiddenComments = comments.filter((c) => c.hidden);
+  const sortedComments = [...visibleComments, ...hiddenComments];
 
   if (loadingPost) {
     return (
@@ -153,7 +183,19 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
         </Link>
 
         <article className="bg-white rounded-2xl shadow-md border border-[var(--border)] p-8 mb-8">
-          <h1 className="text-3xl font-bold text-[var(--foreground)] mb-4">{post!.title}</h1>
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <h1 className="text-3xl font-bold text-[var(--foreground)]">{post!.title}</h1>
+            {isAuthor && (
+              <button
+                onClick={handleDeleteBlog}
+                disabled={deletingBlog}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 border border-red-200 text-sm transition-colors disabled:opacity-50"
+              >
+                <Trash2 size={14} />
+                {deletingBlog ? 'Eliminando…' : 'Eliminar blog'}
+              </button>
+            )}
+          </div>
 
           <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--muted-foreground)] mb-6 pb-6 border-b border-[var(--border)]">
             <span className="font-medium text-[var(--foreground)]">{post!.authorName}</span>
@@ -192,13 +234,47 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
           )}
 
           <div className="space-y-4 mb-8">
-            {comments.map((c) => (
-              <div key={c.id} className="p-4 rounded-xl bg-[var(--muted)] border border-[var(--border)]">
+            {sortedComments.map((c) => (
+              <div
+                key={c.id}
+                className={`p-4 rounded-xl border transition-colors ${
+                  c.hidden
+                    ? 'bg-gray-50 border-gray-200 opacity-60'
+                    : 'bg-[var(--muted)] border-[var(--border)]'
+                }`}
+              >
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="font-semibold text-sm text-[var(--foreground)]">{c.authorName}</span>
+                  <span className={`font-semibold text-sm ${c.hidden ? 'text-gray-500' : 'text-[var(--foreground)]'}`}>
+                    {c.authorName}
+                  </span>
                   <span className="text-xs text-[var(--muted-foreground)]">{formatDate(c.createdAt)}</span>
+                  {c.hidden && (
+                    <span className="ml-auto text-xs text-gray-400 italic">Oculto por el autor</span>
+                  )}
                 </div>
-                <p className="text-sm text-[var(--foreground)]">{c.content}</p>
+                <p className={`text-sm ${c.hidden ? 'text-gray-400' : 'text-[var(--foreground)]'}`}>
+                  {c.content}
+                </p>
+                <div className="flex gap-2 mt-2 justify-end">
+                  {isAuthor && (
+                    <button
+                      onClick={() => handleToggleHidden(c)}
+                      className="inline-flex items-center gap-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                    >
+                      {c.hidden ? <Eye size={12} /> : <EyeOff size={12} />}
+                      {c.hidden ? 'Mostrar' : 'Ocultar'}
+                    </button>
+                  )}
+                  {user && user.uid === c.authorId && (
+                    <button
+                      onClick={() => handleDeleteComment(c.id)}
+                      className="inline-flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      <Trash2 size={12} />
+                      Eliminar
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
