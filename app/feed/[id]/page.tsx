@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   doc, getDoc, setDoc, deleteDoc, collection, getDocs, addDoc,
-  updateDoc, arrayUnion, arrayRemove, orderBy, query, serverTimestamp,
+  updateDoc, arrayUnion, arrayRemove, orderBy, query, serverTimestamp, increment,
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '../../../lib/firebase';
@@ -22,6 +22,7 @@ interface BlogPost {
   tags: string[];
   authorId: string;
   authorName: string;
+  favoriteCount: number;
   createdAt: { seconds: number } | null;
 }
 
@@ -46,6 +47,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
   const router = useRouter();
 
   const [post, setPost] = useState<BlogPost | null>(null);
+  const [favoriteCount, setFavoriteCount] = useState(0);
   const [comments, setComments] = useState<Comment[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -75,7 +77,9 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
       try {
         const snap = await getDoc(doc(db, 'blogs', id));
         if (!snap.exists()) { setPageError('Blog no encontrado.'); return; }
-        setPost(snap.data() as BlogPost);
+        const data = snap.data() as BlogPost;
+        setPost(data);
+        setFavoriteCount(data.favoriteCount ?? 0);
       } catch (err) {
         console.error(err);
         setPageError('Error al cargar el blog.');
@@ -106,13 +110,18 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
   const handleToggleFavorite = async () => {
     if (!user) return;
     const favRef = doc(db, 'users', user.uid, 'favorites', id);
+    const blogRef = doc(db, 'blogs', id);
     try {
       if (isFavorite) {
         await deleteDoc(favRef);
+        await updateDoc(blogRef, { favoriteCount: increment(-1) });
         setIsFavorite(false);
+        setFavoriteCount((n) => Math.max(0, n - 1));
       } else {
         await setDoc(favRef, { blogId: id, addedAt: serverTimestamp() });
+        await updateDoc(blogRef, { favoriteCount: increment(1) });
         setIsFavorite(true);
+        setFavoriteCount((n) => n + 1);
       }
     } catch (err) {
       console.error(err);
@@ -301,13 +310,14 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
                 <button
                   onClick={handleToggleFavorite}
                   title={isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
-                  className={`p-2 rounded-lg border transition-colors ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
                     isFavorite
                       ? 'bg-red-50 border-red-200 text-red-500'
                       : 'border-[var(--border)] text-[var(--muted-foreground)] hover:bg-red-50 hover:border-red-200 hover:text-red-500'
                   }`}
                 >
-                  <Heart size={18} fill={isFavorite ? 'currentColor' : 'none'} />
+                  <Heart size={15} fill={isFavorite ? 'currentColor' : 'none'} />
+                  <span>{favoriteCount}</span>
                 </button>
               )}
               {isAuthor && (

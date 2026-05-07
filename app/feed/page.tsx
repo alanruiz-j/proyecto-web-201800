@@ -1,17 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  collection, getDocs, orderBy, query,
+  collection, getDocs,
   doc, setDoc, deleteDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase';
 import Card from '../../components/Card';
-import { BookOpen, Clock, Heart } from 'lucide-react';
-import { tagColor } from '../../lib/tags';
+import { BookOpen, Clock, Heart, SlidersHorizontal } from 'lucide-react';
+import { tagColor, TAGS } from '../../lib/tags';
 
 interface BlogPost {
   id: string;
@@ -19,8 +19,11 @@ interface BlogPost {
   body: string;
   tags: string[];
   authorName: string;
+  favoriteCount: number;
   createdAt: { seconds: number } | null;
 }
+
+type SortBy = 'newest' | 'favorites';
 
 export default function FeedPage() {
   const router = useRouter();
@@ -29,6 +32,8 @@ export default function FeedPage() {
   const [error, setError] = useState('');
   const [user, setUser] = useState<User | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortBy>('newest');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, setUser);
@@ -38,9 +43,19 @@ export default function FeedPage() {
   useEffect(() => {
     const fetchBlogs = async () => {
       try {
-        const q = query(collection(db, 'blogs'), orderBy('createdAt', 'desc'));
-        const snapshot = await getDocs(q);
-        setBlogs(snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<BlogPost, 'id'>) })));
+        const snapshot = await getDocs(collection(db, 'blogs'));
+        setBlogs(snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            title: data.title ?? '',
+            body: data.body ?? '',
+            tags: data.tags ?? [],
+            authorName: data.authorName ?? '',
+            favoriteCount: data.favoriteCount ?? 0,
+            createdAt: data.createdAt ?? null,
+          };
+        }));
       } catch (err) {
         console.error(err);
         setError('No se pudieron cargar los blogs.');
@@ -77,12 +92,81 @@ export default function FeedPage() {
     });
   };
 
+  const displayed = useMemo(() => {
+    let list = selectedTag
+      ? blogs.filter((b) => b.tags.includes(selectedTag))
+      : blogs;
+    if (sortBy === 'newest') {
+      list = [...list].sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+    } else {
+      list = [...list].sort((a, b) => b.favoriteCount - a.favoriteCount);
+    }
+    return list;
+  }, [blogs, selectedTag, sortBy]);
+
   return (
     <main className="min-h-screen bg-[var(--background)] py-12 px-4">
       <div className="max-w-5xl mx-auto">
-        <div className="mb-10">
+        {/* Header */}
+        <div className="mb-8">
           <h1 className="text-4xl font-bold text-[var(--foreground)] mb-2">Feed</h1>
           <p className="text-[var(--muted-foreground)]">Descubre historias escritas por nuestra comunidad.</p>
+        </div>
+
+        {/* Filtros */}
+        <div className="mb-8 space-y-4">
+          {/* Tags */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedTag(null)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                selectedTag === null
+                  ? 'bg-[var(--primary)] text-white'
+                  : 'bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--border)]'
+              }`}
+            >
+              Todos
+            </button>
+            {TAGS.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  selectedTag === tag
+                    ? tagColor(tag) + ' ring-2 ring-offset-1 ring-current'
+                    : tagColor(tag) + ' opacity-70 hover:opacity-100'
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+
+          {/* Orden */}
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal size={15} className="text-[var(--muted-foreground)]" />
+            <span className="text-sm text-[var(--muted-foreground)]">Ordenar:</span>
+            <button
+              onClick={() => setSortBy('newest')}
+              className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                sortBy === 'newest'
+                  ? 'bg-[var(--foreground)] text-white'
+                  : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)]'
+              }`}
+            >
+              Más nuevos
+            </button>
+            <button
+              onClick={() => setSortBy('favorites')}
+              className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                sortBy === 'favorites'
+                  ? 'bg-[var(--foreground)] text-white'
+                  : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)]'
+              }`}
+            >
+              Más favoritos
+            </button>
+          </div>
         </div>
 
         {loading && (
@@ -93,31 +177,35 @@ export default function FeedPage() {
 
         {error && <p className="text-center text-red-500 py-10">{error}</p>}
 
-        {!loading && !error && blogs.length === 0 && (
+        {!loading && !error && displayed.length === 0 && (
           <div className="text-center py-20">
             <BookOpen size={48} className="mx-auto mb-4 text-[var(--muted-foreground)]" />
-            <p className="text-lg text-[var(--muted-foreground)]">Aún no hay blogs publicados.</p>
-            <p className="text-sm text-[var(--muted-foreground)] mt-1">
-              ¡Sé el primero en{' '}
-              <span
-                className="text-[var(--primary)] underline cursor-pointer"
-                onClick={() => router.push('/publicar')}
-              >publicar uno</span>!
+            <p className="text-lg text-[var(--muted-foreground)]">
+              {selectedTag ? `No hay blogs sobre "${selectedTag}" aún.` : 'Aún no hay blogs publicados.'}
             </p>
+            {!selectedTag && (
+              <p className="text-sm text-[var(--muted-foreground)] mt-1">
+                ¡Sé el primero en{' '}
+                <span
+                  className="text-[var(--primary)] underline cursor-pointer"
+                  onClick={() => router.push('/publicar')}
+                >publicar uno</span>!
+              </p>
+            )}
           </div>
         )}
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {blogs.map((post) => {
+          {displayed.map((post) => {
             const faved = favorites.has(post.id);
             return (
               <Card
                 key={post.id}
                 hover
-                className="relative h-full flex flex-col p-6 gap-3 pr-12 cursor-pointer"
+                className="relative h-full flex flex-col p-6 gap-3 cursor-pointer"
                 onClick={() => router.push(`/feed/${post.id}`)}
               >
-                <h2 className="text-lg font-bold text-[var(--foreground)] hover:text-[var(--primary)] transition-colors line-clamp-2">
+                <h2 className="text-lg font-bold text-[var(--foreground)] hover:text-[var(--primary)] transition-colors line-clamp-2 pr-8">
                   {post.title}
                 </h2>
                 <p className="text-sm text-[var(--muted-foreground)] line-clamp-3 flex-1">
@@ -138,19 +226,21 @@ export default function FeedPage() {
                   <span className="ml-auto font-medium">{post.authorName}</span>
                 </div>
 
-                {user && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); toggleFavorite(post.id); }}
-                    title={faved ? 'Quitar de favoritos' : 'Agregar a favoritos'}
-                    className={`absolute top-4 right-4 p-1.5 rounded-full transition-colors ${
-                      faved
-                        ? 'text-red-500'
-                        : 'text-[var(--muted-foreground)] hover:text-red-500'
-                    }`}
-                  >
-                    <Heart size={16} fill={faved ? 'currentColor' : 'none'} />
-                  </button>
-                )}
+                {/* Botón favorito + contador */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleFavorite(post.id); }}
+                  title={user ? (faved ? 'Quitar de favoritos' : 'Agregar a favoritos') : 'Inicia sesión para guardar'}
+                  className={`absolute top-4 right-4 flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
+                    faved
+                      ? 'text-red-500 bg-red-50'
+                      : 'text-[var(--muted-foreground)] hover:text-red-500 hover:bg-red-50'
+                  }`}
+                >
+                  <Heart size={13} fill={faved ? 'currentColor' : 'none'} />
+                  {post.favoriteCount > 0 && (
+                    <span>{post.favoriteCount}</span>
+                  )}
+                </button>
               </Card>
             );
           })}
