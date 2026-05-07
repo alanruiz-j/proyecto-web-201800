@@ -195,6 +195,24 @@ async function createBlog(idToken, data) {
   return result.name.split('/').pop();
 }
 
+async function addFavorite(userIdToken, userId, blogId, addedAt) {
+  const res = await fetch(
+    `${FS_BASE}/users/${userId}/favorites/${blogId}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${userIdToken}`,
+      },
+      body: JSON.stringify({
+        fields: toFSFields({ blogId, addedAt: { _type: 'timestamp', value: addedAt } }),
+      }),
+    }
+  );
+  const result = await res.json();
+  if (result.error) throw new Error(JSON.stringify(result.error));
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 console.log('🌱 Iniciando seed de Firebase...\n');
 
@@ -225,43 +243,43 @@ for (const user of USERS) {
   }
 }
 
-const uids = createdUsers.map((u) => u.uid).filter(Boolean);
-console.log(`\n  ${uids.length} usuarios listos.\n`);
+const activeUsers = createdUsers.filter((u) => u.uid && u.idToken);
+console.log(`\n  ${activeUsers.length} usuarios listos.\n`);
 
-// Paso 2: crear blogs por usuario
+// Paso 2: crear blogs por usuario y registrar quiénes los favoritan
 const now = new Date();
 let totalBlogs = 0;
+let totalFavorites = 0;
 
-for (let i = 0; i < createdUsers.length; i++) {
-  const user = createdUsers[i];
-  if (!user.uid || !user.idToken) {
-    console.log(`  Omitiendo blogs de ${user.displayName} (sin idToken)`);
-    continue;
-  }
+// { blogId: [ { uid, idToken } ] } — usuarios que van a guardar cada blog
+const favoritesMap = {};
 
-  const otherUids = uids.filter((u) => u !== user.uid);
+for (let i = 0; i < activeUsers.length; i++) {
+  const user = activeUsers[i];
+  const otherUsers = activeUsers.filter((u) => u.uid !== user.uid);
   const userBlogs = BLOGS[i];
 
   for (let j = 0; j < userBlogs.length; j++) {
     const blog = userBlogs[j];
-    // El primer blog de cada usuario tiene más likes (todos los demás lo dieron)
-    // El segundo blog tiene la mitad de likes
-    const likedBy = j === 0 ? otherUids : otherUids.slice(0, Math.ceil(otherUids.length / 2));
-
+    // Primer blog: lo favoritan todos los otros usuarios
+    // Segundo blog: lo favoritan la mitad de los otros
+    const favUsers = j === 0 ? otherUsers : otherUsers.slice(0, Math.ceil(otherUsers.length / 2));
+    const favoriteCount = favUsers.length;
     const createdAt = new Date(now.getTime() - (i * 2 + j) * 3600000);
 
     process.stdout.write(`  Publicando "${blog.title.slice(0, 50)}..."... `);
     try {
-      await createBlog(user.idToken, {
+      const blogId = await createBlog(user.idToken, {
         title: blog.title,
         body: blog.body,
         tags: blog.tags,
         authorId: user.uid,
         authorName: user.displayName,
-        likedBy,
+        favoriteCount,
         createdAt: { _type: 'timestamp', value: createdAt.toISOString() },
       });
-      console.log('✓');
+      favoritesMap[blogId] = favUsers;
+      console.log(`✓ (${favoriteCount} favoritos)`);
       totalBlogs++;
     } catch (err) {
       console.log(`✗ Error: ${err.message}`);
@@ -269,7 +287,20 @@ for (let i = 0; i < createdUsers.length; i++) {
   }
 }
 
-console.log(`\n✅ Seed completo: ${createdUsers.filter(u => u.uid).length} usuarios, ${totalBlogs} blogs creados.\n`);
+// Paso 3: crear los documentos users/{uid}/favorites/{blogId} para cada favorito
+console.log('\n  Registrando favoritos en subcollecciones...');
+for (const [blogId, favUsers] of Object.entries(favoritesMap)) {
+  for (const favUser of favUsers) {
+    try {
+      await addFavorite(favUser.idToken, favUser.uid, blogId, now.toISOString());
+      totalFavorites++;
+    } catch (err) {
+      console.error(`  ✗ Favorito de ${favUser.displayName} en ${blogId}: ${err.message}`);
+    }
+  }
+}
+
+console.log(`\n✅ Seed completo: ${activeUsers.length} usuarios, ${totalBlogs} blogs, ${totalFavorites} favoritos.\n`);
 console.log('Credenciales de los usuarios:');
 for (const u of USERS) {
   console.log(`  ${u.displayName.padEnd(36)} ${u.email}  /  ${u.password}`);

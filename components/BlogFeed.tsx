@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ThumbsUp, Clock } from 'lucide-react';
+import { Heart, Clock } from 'lucide-react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import Card from './Card';
@@ -15,7 +15,7 @@ interface BlogPost {
   body: string;
   tags: string[];
   authorName: string;
-  likedBy: string[];
+  favoriteCount: number;
   createdAt: { seconds: number } | null;
 }
 
@@ -48,11 +48,11 @@ export default function BlogFeed() {
             body: data.body ?? '',
             tags: data.tags ?? [],
             authorName: data.authorName ?? '',
-            likedBy: data.likedBy ?? [],
+            favoriteCount: data.favoriteCount ?? 0,
             createdAt: data.createdAt ?? null,
           } as BlogPost;
         });
-        all.sort((a, b) => b.likedBy.length - a.likedBy.length);
+        all.sort((a, b) => b.favoriteCount - a.favoriteCount);
         setPosts(all.slice(0, 6));
       })
       .catch(console.error)
@@ -126,8 +126,8 @@ export default function BlogFeed() {
                         <p className="text-sm font-medium">{post.authorName}</p>
                       </div>
                       <div className="flex items-center gap-1 text-[var(--muted-foreground)]">
-                        <ThumbsUp size={14} />
-                        <span className="text-xs">{post.likedBy.length}</span>
+                        <Heart size={14} />
+                        <span className="text-xs">{post.favoriteCount}</span>
                       </div>
                     </div>
                   </div>
