@@ -6,18 +6,24 @@ import { useRouter } from 'next/navigation';
 import {
   doc,
   getDoc,
+  setDoc,
+  deleteDoc,
   collection,
   getDocs,
   addDoc,
-  deleteDoc,
   updateDoc,
+  arrayUnion,
+  arrayRemove,
   orderBy,
   query,
   serverTimestamp,
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '../../../lib/firebase';
-import { ArrowLeft, Tag, Clock, MessageCircle, Send, Trash2, EyeOff, Eye } from 'lucide-react';
+import {
+  ArrowLeft, Tag, Clock, MessageCircle, Send,
+  Trash2, EyeOff, Eye, ThumbsUp, ThumbsDown, Heart,
+} from 'lucide-react';
 
 interface BlogPost {
   title: string;
@@ -34,6 +40,8 @@ interface Comment {
   authorId: string;
   authorName: string;
   hidden: boolean;
+  likedBy: string[];
+  dislikedBy: string[];
   createdAt: { seconds: number } | null;
 }
 
@@ -44,6 +52,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
   const [post, setPost] = useState<BlogPost | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [user, setUser] = useState<User | null>(null);
+  const [isFavorite, setIsFavorite] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [loadingPost, setLoadingPost] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -55,6 +64,14 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return unsubscribe;
   }, []);
+
+  // Check favorite status when user changes
+  useEffect(() => {
+    if (!user) { setIsFavorite(false); return; }
+    getDoc(doc(db, 'users', user.uid, 'favorites', id)).then((snap) => {
+      setIsFavorite(snap.exists());
+    });
+  }, [user, id]);
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -74,7 +91,13 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
       try {
         const q = query(collection(db, 'blogs', id, 'comments'), orderBy('createdAt', 'asc'));
         const snap = await getDocs(q);
-        setComments(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Comment, 'id'>) })));
+        setComments(snap.docs.map((d) => ({
+          id: d.id,
+          likedBy: [],
+          dislikedBy: [],
+          hidden: false,
+          ...(d.data() as Omit<Comment, 'id'>),
+        })));
       } catch (err) {
         console.error(err);
       }
@@ -85,6 +108,18 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
   }, [id]);
 
   const isAuthor = user && post && user.uid === post.authorId;
+
+  const handleToggleFavorite = async () => {
+    if (!user) return;
+    const favRef = doc(db, 'users', user.uid, 'favorites', id);
+    if (isFavorite) {
+      await deleteDoc(favRef);
+      setIsFavorite(false);
+    } else {
+      await setDoc(favRef, { blogId: id, addedAt: serverTimestamp() });
+      setIsFavorite(true);
+    }
+  };
 
   const handleDeleteBlog = async () => {
     if (!confirm('¿Eliminar este blog? Esta acción no se puede deshacer.')) return;
@@ -109,15 +144,53 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
 
   const handleToggleHidden = async (comment: Comment) => {
     try {
-      await updateDoc(doc(db, 'blogs', id, 'comments', comment.id), {
-        hidden: !comment.hidden,
-      });
+      await updateDoc(doc(db, 'blogs', id, 'comments', comment.id), { hidden: !comment.hidden });
       setComments((prev) =>
         prev.map((c) => (c.id === comment.id ? { ...c, hidden: !c.hidden } : c))
       );
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleVote = async (comment: Comment, vote: 'like' | 'dislike') => {
+    if (!user) return;
+    const uid = user.uid;
+    const hasLiked = comment.likedBy.includes(uid);
+    const hasDisliked = comment.dislikedBy.includes(uid);
+    const commentRef = doc(db, 'blogs', id, 'comments', comment.id);
+
+    let updates: Record<string, unknown>;
+    if (vote === 'like') {
+      updates = hasLiked
+        ? { likedBy: arrayRemove(uid) }
+        : { likedBy: arrayUnion(uid), dislikedBy: arrayRemove(uid) };
+    } else {
+      updates = hasDisliked
+        ? { dislikedBy: arrayRemove(uid) }
+        : { dislikedBy: arrayUnion(uid), likedBy: arrayRemove(uid) };
+    }
+
+    await updateDoc(commentRef, updates);
+
+    setComments((prev) =>
+      prev.map((c) => {
+        if (c.id !== comment.id) return c;
+        if (vote === 'like') {
+          return {
+            ...c,
+            likedBy: hasLiked ? c.likedBy.filter((x) => x !== uid) : [...c.likedBy.filter((x) => x !== uid), uid],
+            dislikedBy: c.dislikedBy.filter((x) => x !== uid),
+          };
+        } else {
+          return {
+            ...c,
+            dislikedBy: hasDisliked ? c.dislikedBy.filter((x) => x !== uid) : [...c.dislikedBy.filter((x) => x !== uid), uid],
+            likedBy: c.likedBy.filter((x) => x !== uid),
+          };
+        }
+      })
+    );
   };
 
   const handleComment = async () => {
@@ -130,6 +203,8 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
         authorId: user!.uid,
         authorName: user!.displayName || user!.email || 'Anónimo',
         hidden: false,
+        likedBy: [] as string[],
+        dislikedBy: [] as string[],
         createdAt: serverTimestamp(),
       };
       const ref = await addDoc(collection(db, 'blogs', id, 'comments'), data);
@@ -150,7 +225,14 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
     });
   };
 
-  const visibleComments = comments.filter((c) => !c.hidden);
+  const netVotes = (c: Comment) => c.likedBy.length - c.dislikedBy.length;
+
+  const visibleComments = comments
+    .filter((c) => !c.hidden)
+    .sort((a, b) => {
+      const diff = netVotes(b) - netVotes(a);
+      return diff !== 0 ? diff : (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0);
+    });
   const hiddenComments = comments.filter((c) => c.hidden);
   const sortedComments = [...visibleComments, ...hiddenComments];
 
@@ -185,16 +267,31 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
         <article className="bg-white rounded-2xl shadow-md border border-[var(--border)] p-8 mb-8">
           <div className="flex items-start justify-between gap-4 mb-4">
             <h1 className="text-3xl font-bold text-[var(--foreground)]">{post!.title}</h1>
-            {isAuthor && (
-              <button
-                onClick={handleDeleteBlog}
-                disabled={deletingBlog}
-                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 border border-red-200 text-sm transition-colors disabled:opacity-50"
-              >
-                <Trash2 size={14} />
-                {deletingBlog ? 'Eliminando…' : 'Eliminar blog'}
-              </button>
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {user && (
+                <button
+                  onClick={handleToggleFavorite}
+                  title={isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+                  className={`p-2 rounded-lg border transition-colors ${
+                    isFavorite
+                      ? 'bg-red-50 border-red-200 text-red-500'
+                      : 'border-[var(--border)] text-[var(--muted-foreground)] hover:bg-red-50 hover:border-red-200 hover:text-red-500'
+                  }`}
+                >
+                  <Heart size={18} fill={isFavorite ? 'currentColor' : 'none'} />
+                </button>
+              )}
+              {isAuthor && (
+                <button
+                  onClick={handleDeleteBlog}
+                  disabled={deletingBlog}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 border border-red-200 text-sm transition-colors disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  {deletingBlog ? 'Eliminando…' : 'Eliminar'}
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--muted-foreground)] mb-6 pb-6 border-b border-[var(--border)]">
@@ -234,49 +331,83 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
           )}
 
           <div className="space-y-4 mb-8">
-            {sortedComments.map((c) => (
-              <div
-                key={c.id}
-                className={`p-4 rounded-xl border transition-colors ${
-                  c.hidden
-                    ? 'bg-gray-50 border-gray-200 opacity-60'
-                    : 'bg-[var(--muted)] border-[var(--border)]'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`font-semibold text-sm ${c.hidden ? 'text-gray-500' : 'text-[var(--foreground)]'}`}>
-                    {c.authorName}
-                  </span>
-                  <span className="text-xs text-[var(--muted-foreground)]">{formatDate(c.createdAt)}</span>
-                  {c.hidden && (
-                    <span className="ml-auto text-xs text-gray-400 italic">Oculto por el autor</span>
-                  )}
-                </div>
-                <p className={`text-sm ${c.hidden ? 'text-gray-400' : 'text-[var(--foreground)]'}`}>
-                  {c.content}
-                </p>
-                <div className="flex gap-2 mt-2 justify-end">
-                  {isAuthor && (
+            {sortedComments.map((c) => {
+              const userLiked = user ? c.likedBy.includes(user.uid) : false;
+              const userDisliked = user ? c.dislikedBy.includes(user.uid) : false;
+              return (
+                <div
+                  key={c.id}
+                  className={`p-4 rounded-xl border transition-colors ${
+                    c.hidden
+                      ? 'bg-gray-50 border-gray-200 opacity-60'
+                      : 'bg-[var(--muted)] border-[var(--border)]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`font-semibold text-sm ${c.hidden ? 'text-gray-500' : 'text-[var(--foreground)]'}`}>
+                      {c.authorName}
+                    </span>
+                    <span className="text-xs text-[var(--muted-foreground)]">{formatDate(c.createdAt)}</span>
+                    {c.hidden && (
+                      <span className="ml-auto text-xs text-gray-400 italic">Oculto por el autor</span>
+                    )}
+                  </div>
+
+                  <p className={`text-sm ${c.hidden ? 'text-gray-400' : 'text-[var(--foreground)]'}`}>
+                    {c.content}
+                  </p>
+
+                  <div className="flex items-center gap-3 mt-3">
+                    {/* Like / Dislike */}
                     <button
-                      onClick={() => handleToggleHidden(c)}
-                      className="inline-flex items-center gap-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                      onClick={() => handleVote(c, 'like')}
+                      disabled={!user}
+                      className={`inline-flex items-center gap-1 text-xs rounded-full px-2 py-1 transition-colors ${
+                        userLiked
+                          ? 'bg-green-100 text-green-600'
+                          : 'text-[var(--muted-foreground)] hover:text-green-600 hover:bg-green-50'
+                      } disabled:cursor-not-allowed`}
                     >
-                      {c.hidden ? <Eye size={12} /> : <EyeOff size={12} />}
-                      {c.hidden ? 'Mostrar' : 'Ocultar'}
+                      <ThumbsUp size={12} />
+                      {c.likedBy.length}
                     </button>
-                  )}
-                  {user && user.uid === c.authorId && (
                     <button
-                      onClick={() => handleDeleteComment(c.id)}
-                      className="inline-flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors"
+                      onClick={() => handleVote(c, 'dislike')}
+                      disabled={!user}
+                      className={`inline-flex items-center gap-1 text-xs rounded-full px-2 py-1 transition-colors ${
+                        userDisliked
+                          ? 'bg-red-100 text-red-500'
+                          : 'text-[var(--muted-foreground)] hover:text-red-500 hover:bg-red-50'
+                      } disabled:cursor-not-allowed`}
                     >
-                      <Trash2 size={12} />
-                      Eliminar
+                      <ThumbsDown size={12} />
+                      {c.dislikedBy.length}
                     </button>
-                  )}
+
+                    <div className="ml-auto flex gap-2">
+                      {isAuthor && (
+                        <button
+                          onClick={() => handleToggleHidden(c)}
+                          className="inline-flex items-center gap-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                        >
+                          {c.hidden ? <Eye size={12} /> : <EyeOff size={12} />}
+                          {c.hidden ? 'Mostrar' : 'Ocultar'}
+                        </button>
+                      )}
+                      {user && user.uid === c.authorId && (
+                        <button
+                          onClick={() => handleDeleteComment(c.id)}
+                          className="inline-flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 size={12} />
+                          Eliminar
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {user ? (
@@ -300,7 +431,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
             </div>
           ) : (
             <p className="text-sm text-[var(--muted-foreground)]">
-              <Link href="/login" className="text-[var(--primary)] underline">Inicia sesión</Link> para dejar un comentario.
+              <Link href="/login" className="text-[var(--primary)] underline">Inicia sesión</Link> para votar y comentar.
             </p>
           )}
         </section>

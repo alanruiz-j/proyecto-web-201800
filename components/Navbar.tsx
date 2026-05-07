@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Menu, X, LogOut, BookOpen } from 'lucide-react';
+import { Search, Menu, X, LogOut, BookOpen, Heart } from 'lucide-react';
 import Button from './Button';
 import { auth, logOut } from '../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -92,6 +92,14 @@ export default function Navbar() {
                       <BookOpen size={16} />
                       Mis Blogs
                     </Link>
+                    <Link
+                      href="/favoritos"
+                      onClick={() => setDropdownOpen(false)}
+                      className="w-full px-4 py-2 text-left text-[var(--foreground)] hover:bg-[var(--muted)] flex items-center gap-2 transition-colors"
+                    >
+                      <Heart size={16} />
+                      Favoritos
+                    </Link>
                     <button
                       onClick={handleLogout}
                       className="w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
@@ -153,6 +161,13 @@ export default function Navbar() {
                   >
                     <BookOpen size={16} />
                     Mis Blogs
+                  </Link>
+                  <Link
+                    href="/favoritos"
+                    className="w-full px-4 py-2 text-[var(--foreground)] bg-[var(--muted)] rounded-full flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Heart size={16} />
+                    Favoritos
                   </Link>
                   <button
                     onClick={handleLogout}
