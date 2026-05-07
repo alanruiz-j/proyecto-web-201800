@@ -1,9 +1,20 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { auth } from '../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+    });
+    return unsubscribe;
+  }, []);
 
   return (
     <footer className="bg-[var(--foreground)] text-white py-10">
@@ -36,8 +47,12 @@ export default function Footer() {
               <ul className="space-y-2">
                 <li><Link href="/mis-blogs" className="text-white/60 hover:text-white transition-colors text-sm">Mis Blogs</Link></li>
                 <li><Link href="/favoritos" className="text-white/60 hover:text-white transition-colors text-sm">Favoritos</Link></li>
-                <li><Link href="/login" className="text-white/60 hover:text-white transition-colors text-sm">Iniciar Sesión</Link></li>
-                <li><Link href="/signup" className="text-white/60 hover:text-white transition-colors text-sm">Crear Cuenta</Link></li>
+                {!isAuthenticated && (
+                  <>
+                    <li><Link href="/login" className="text-white/60 hover:text-white transition-colors text-sm">Iniciar Sesión</Link></li>
+                    <li><Link href="/signup" className="text-white/60 hover:text-white transition-colors text-sm">Crear Cuenta</Link></li>
+                  </>
+                )}
               </ul>
             </div>
           </div>
