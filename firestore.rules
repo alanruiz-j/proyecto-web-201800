@@ -6,12 +6,13 @@ service cloud.firestore {
       allow read: if true;
       allow create: if request.auth != null;
       allow delete: if request.auth != null && request.auth.uid == resource.data.authorId;
+      // Authors can edit their blog; any auth user can update likedBy
+      allow update: if request.auth != null;
 
       match /comments/{commentId} {
         allow read: if true;
         allow create: if request.auth != null;
         allow delete: if request.auth != null && request.auth.uid == resource.data.authorId;
-        // Any auth user can update (likes/dislikes); blog author can also hide comments
         allow update: if request.auth != null;
       }
     }

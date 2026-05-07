@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   collection, getDocs, doc, getDoc, deleteDoc,
@@ -111,48 +110,52 @@ export default function FavoritosPage() {
           <div className="text-center py-20">
             <BookOpen size={48} className="mx-auto mb-4 text-[var(--muted-foreground)]" />
             <p className="text-lg text-[var(--muted-foreground)]">No tienes blogs favoritos aún.</p>
-            <Link href="/feed" className="inline-block mt-4 text-[var(--primary)] underline text-sm">
+            <span
+              className="inline-block mt-4 text-[var(--primary)] underline text-sm cursor-pointer"
+              onClick={() => router.push('/feed')}
+            >
               Explorar el Feed
-            </Link>
+            </span>
           </div>
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {blogs.map((post) => (
-              <div key={post.id} className="relative group">
-                <Link href={`/feed/${post.id}`} className="block">
-                  <Card hover className="h-full flex flex-col p-6 gap-3 pr-12">
-                    <h2 className="text-lg font-bold text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors line-clamp-2">
-                      {post.title}
-                    </h2>
-                    <p className="text-sm text-[var(--muted-foreground)] line-clamp-3 flex-1">
-                      {post.body.slice(0, 200)}{post.body.length > 200 ? '…' : ''}
-                    </p>
-                    {post.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {post.tags.slice(0, 3).map((tag) => (
-                          <span key={tag} className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium ${tagColor(tag)}`}>
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)] pt-1 border-t border-[var(--border)]">
-                      <Clock size={12} />
-                      <span>{formatDate(post.createdAt)}</span>
-                      <span className="ml-auto font-medium">{post.authorName}</span>
-                    </div>
-                  </Card>
-                </Link>
+              <Card
+                key={post.id}
+                hover
+                className="relative h-full flex flex-col p-6 gap-3 pr-12 cursor-pointer"
+                onClick={() => router.push(`/feed/${post.id}`)}
+              >
+                <h2 className="text-lg font-bold text-[var(--foreground)] hover:text-[var(--primary)] transition-colors line-clamp-2">
+                  {post.title}
+                </h2>
+                <p className="text-sm text-[var(--muted-foreground)] line-clamp-3 flex-1">
+                  {post.body.slice(0, 200)}{post.body.length > 200 ? '…' : ''}
+                </p>
+                {post.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {post.tags.slice(0, 3).map((tag) => (
+                      <span key={tag} className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium ${tagColor(tag)}`}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)] pt-1 border-t border-[var(--border)]">
+                  <Clock size={12} />
+                  <span>{formatDate(post.createdAt)}</span>
+                  <span className="ml-auto font-medium">{post.authorName}</span>
+                </div>
 
                 <button
-                  onClick={(e) => { e.preventDefault(); handleRemoveFavorite(post.id); }}
+                  onClick={(e) => { e.stopPropagation(); handleRemoveFavorite(post.id); }}
                   disabled={removingId === post.id}
                   title="Quitar de favoritos"
-                  className="absolute top-4 right-4 z-10 p-1.5 rounded-full text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
+                  className="absolute top-4 right-4 p-1.5 rounded-full text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
                 >
                   <Heart size={16} fill="currentColor" />
                 </button>
-              </div>
+              </Card>
             ))}
           </div>
         )}
