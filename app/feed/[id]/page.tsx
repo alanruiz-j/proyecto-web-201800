@@ -4,24 +4,15 @@ import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  doc,
-  getDoc,
-  setDoc,
-  deleteDoc,
-  collection,
-  getDocs,
-  addDoc,
-  updateDoc,
-  arrayUnion,
-  arrayRemove,
-  orderBy,
-  query,
-  serverTimestamp,
+  doc, getDoc, setDoc, deleteDoc, collection, getDocs, addDoc,
+  updateDoc, arrayUnion, arrayRemove, orderBy, query, serverTimestamp,
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '../../../lib/firebase';
+import { tagColor } from '../../../lib/tags';
+import ConfirmModal from '../../../components/ConfirmModal';
 import {
-  ArrowLeft, Tag, Clock, MessageCircle, Send,
+  ArrowLeft, Clock, MessageCircle, Send,
   Trash2, EyeOff, Eye, ThumbsUp, ThumbsDown, Heart,
 } from 'lucide-react';
 
@@ -45,6 +36,11 @@ interface Comment {
   createdAt: { seconds: number } | null;
 }
 
+interface ConfirmState {
+  message: string;
+  onConfirm: () => void;
+}
+
 export default function BlogDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -57,15 +53,16 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
   const [loadingPost, setLoadingPost] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [deletingBlog, setDeletingBlog] = useState(false);
-  const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
   const [commentError, setCommentError] = useState('');
+  const [pageError, setPageError] = useState('');
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return unsubscribe;
   }, []);
 
-  // Check favorite status when user changes
   useEffect(() => {
     if (!user) { setIsFavorite(false); return; }
     getDoc(doc(db, 'users', user.uid, 'favorites', id)).then((snap) => {
@@ -77,11 +74,11 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
     const fetchPost = async () => {
       try {
         const snap = await getDoc(doc(db, 'blogs', id));
-        if (!snap.exists()) { setError('Blog no encontrado.'); return; }
+        if (!snap.exists()) { setPageError('Blog no encontrado.'); return; }
         setPost(snap.data() as BlogPost);
       } catch (err) {
         console.error(err);
-        setError('Error al cargar el blog.');
+        setPageError('Error al cargar el blog.');
       } finally {
         setLoadingPost(false);
       }
@@ -104,39 +101,55 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
     fetchComments();
   }, [id]);
 
-  const isAuthor = user && post && user.uid === post.authorId;
+  const isAuthor = !!(user && post && user.uid === post.authorId);
 
   const handleToggleFavorite = async () => {
     if (!user) return;
     const favRef = doc(db, 'users', user.uid, 'favorites', id);
-    if (isFavorite) {
-      await deleteDoc(favRef);
-      setIsFavorite(false);
-    } else {
-      await setDoc(favRef, { blogId: id, addedAt: serverTimestamp() });
-      setIsFavorite(true);
+    try {
+      if (isFavorite) {
+        await deleteDoc(favRef);
+        setIsFavorite(false);
+      } else {
+        await setDoc(favRef, { blogId: id, addedAt: serverTimestamp() });
+        setIsFavorite(true);
+      }
+    } catch (err) {
+      console.error(err);
+      setActionError('No se pudo actualizar favoritos.');
     }
   };
 
-  const handleDeleteBlog = async () => {
-    if (!confirm('¿Eliminar este blog? Esta acción no se puede deshacer.')) return;
-    setDeletingBlog(true);
-    try {
-      await deleteDoc(doc(db, 'blogs', id));
-      router.push('/feed');
-    } catch (err) {
-      console.error(err);
-      setDeletingBlog(false);
-    }
+  const handleDeleteBlog = () => {
+    setConfirm({
+      message: '¿Eliminar este blog? Esta acción no se puede deshacer.',
+      onConfirm: async () => {
+        setDeletingBlog(true);
+        try {
+          await deleteDoc(doc(db, 'blogs', id));
+          router.push('/feed');
+        } catch (err) {
+          console.error(err);
+          setActionError('No se pudo eliminar el blog. Verifica los permisos de Firestore.');
+          setDeletingBlog(false);
+        }
+      },
+    });
   };
 
-  const handleDeleteComment = async (commentId: string) => {
-    try {
-      await deleteDoc(doc(db, 'blogs', id, 'comments', commentId));
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
-    } catch (err) {
-      console.error(err);
-    }
+  const handleDeleteComment = (commentId: string) => {
+    setConfirm({
+      message: '¿Eliminar este comentario?',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'blogs', id, 'comments', commentId));
+          setComments((prev) => prev.filter((c) => c.id !== commentId));
+        } catch (err) {
+          console.error(err);
+          setActionError('No se pudo eliminar el comentario. Verifica los permisos de Firestore.');
+        }
+      },
+    });
   };
 
   const handleToggleHidden = async (comment: Comment) => {
@@ -147,6 +160,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
       );
     } catch (err) {
       console.error(err);
+      setActionError('No se pudo ocultar el comentario. Verifica los permisos de Firestore.');
     }
   };
 
@@ -168,26 +182,30 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
         : { dislikedBy: arrayUnion(uid), likedBy: arrayRemove(uid) };
     }
 
-    await updateDoc(commentRef, updates);
-
-    setComments((prev) =>
-      prev.map((c) => {
-        if (c.id !== comment.id) return c;
-        if (vote === 'like') {
-          return {
-            ...c,
-            likedBy: hasLiked ? c.likedBy.filter((x) => x !== uid) : [...c.likedBy.filter((x) => x !== uid), uid],
-            dislikedBy: c.dislikedBy.filter((x) => x !== uid),
-          };
-        } else {
-          return {
-            ...c,
-            dislikedBy: hasDisliked ? c.dislikedBy.filter((x) => x !== uid) : [...c.dislikedBy.filter((x) => x !== uid), uid],
-            likedBy: c.likedBy.filter((x) => x !== uid),
-          };
-        }
-      })
-    );
+    try {
+      await updateDoc(commentRef, updates);
+      setComments((prev) =>
+        prev.map((c) => {
+          if (c.id !== comment.id) return c;
+          if (vote === 'like') {
+            return {
+              ...c,
+              likedBy: hasLiked ? c.likedBy.filter((x) => x !== uid) : [...c.likedBy.filter((x) => x !== uid), uid],
+              dislikedBy: c.dislikedBy.filter((x) => x !== uid),
+            };
+          } else {
+            return {
+              ...c,
+              dislikedBy: hasDisliked ? c.dislikedBy.filter((x) => x !== uid) : [...c.dislikedBy.filter((x) => x !== uid), uid],
+              likedBy: c.likedBy.filter((x) => x !== uid),
+            };
+          }
+        })
+      );
+    } catch (err) {
+      console.error(err);
+      setActionError('No se pudo registrar el voto. Verifica los permisos de Firestore.');
+    }
   };
 
   const handleComment = async () => {
@@ -230,8 +248,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
       const diff = netVotes(b) - netVotes(a);
       return diff !== 0 ? diff : (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0);
     });
-  const hiddenComments = comments.filter((c) => c.hidden);
-  const sortedComments = [...visibleComments, ...hiddenComments];
+  const sortedComments = [...visibleComments, ...comments.filter((c) => c.hidden)];
 
   if (loadingPost) {
     return (
@@ -241,10 +258,10 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  if (error) {
+  if (pageError) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p className="text-red-500 text-lg">{error}</p>
+        <p className="text-red-500 text-lg">{pageError}</p>
         <Link href="/feed" className="text-[var(--primary)] underline">Volver al Feed</Link>
       </div>
     );
@@ -252,6 +269,14 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
 
   return (
     <main className="min-h-screen bg-[var(--background)] py-12 px-4">
+      {confirm && (
+        <ConfirmModal
+          message={confirm.message}
+          onConfirm={() => { confirm.onConfirm(); setConfirm(null); }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+
       <div className="max-w-3xl mx-auto">
         <Link
           href="/feed"
@@ -260,6 +285,13 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
           <ArrowLeft size={16} />
           Volver al Feed
         </Link>
+
+        {actionError && (
+          <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm flex items-center justify-between">
+            {actionError}
+            <button onClick={() => setActionError('')} className="ml-4 text-red-400 hover:text-red-600">✕</button>
+          </div>
+        )}
 
         <article className="bg-white rounded-2xl shadow-md border border-[var(--border)] p-8 mb-8">
           <div className="flex items-start justify-between gap-4 mb-4">
@@ -300,11 +332,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
             {post!.tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {post!.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]"
-                  >
-                    <Tag size={10} />
+                  <span key={tag} className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${tagColor(tag)}`}>
                     {tag}
                   </span>
                 ))}
@@ -334,10 +362,8 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
               return (
                 <div
                   key={c.id}
-                  className={`p-4 rounded-xl border transition-colors ${
-                    c.hidden
-                      ? 'bg-gray-50 border-gray-200 opacity-60'
-                      : 'bg-[var(--muted)] border-[var(--border)]'
+                  className={`p-4 rounded-xl border ${
+                    c.hidden ? 'bg-gray-50 border-gray-200 opacity-60' : 'bg-[var(--muted)] border-[var(--border)]'
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-2">
@@ -355,15 +381,13 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
                   </p>
 
                   <div className="flex items-center gap-3 mt-3">
-                    {/* Like / Dislike */}
                     <button
                       onClick={() => handleVote(c, 'like')}
                       disabled={!user}
+                      title={!user ? 'Inicia sesión para votar' : ''}
                       className={`inline-flex items-center gap-1 text-xs rounded-full px-2 py-1 transition-colors ${
-                        userLiked
-                          ? 'bg-green-100 text-green-600'
-                          : 'text-[var(--muted-foreground)] hover:text-green-600 hover:bg-green-50'
-                      } disabled:cursor-not-allowed`}
+                        userLiked ? 'bg-green-100 text-green-600' : 'text-[var(--muted-foreground)] hover:text-green-600 hover:bg-green-50'
+                      } disabled:opacity-40 disabled:cursor-not-allowed`}
                     >
                       <ThumbsUp size={12} />
                       {c.likedBy.length}
@@ -371,17 +395,16 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
                     <button
                       onClick={() => handleVote(c, 'dislike')}
                       disabled={!user}
+                      title={!user ? 'Inicia sesión para votar' : ''}
                       className={`inline-flex items-center gap-1 text-xs rounded-full px-2 py-1 transition-colors ${
-                        userDisliked
-                          ? 'bg-red-100 text-red-500'
-                          : 'text-[var(--muted-foreground)] hover:text-red-500 hover:bg-red-50'
-                      } disabled:cursor-not-allowed`}
+                        userDisliked ? 'bg-red-100 text-red-500' : 'text-[var(--muted-foreground)] hover:text-red-500 hover:bg-red-50'
+                      } disabled:opacity-40 disabled:cursor-not-allowed`}
                     >
                       <ThumbsDown size={12} />
                       {c.dislikedBy.length}
                     </button>
 
-                    <div className="ml-auto flex gap-2">
+                    <div className="ml-auto flex gap-3">
                       {isAuthor && (
                         <button
                           onClick={() => handleToggleHidden(c)}

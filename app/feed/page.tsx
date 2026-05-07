@@ -10,7 +10,8 @@ import {
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase';
 import Card from '../../components/Card';
-import { BookOpen, Clock, Tag, Heart } from 'lucide-react';
+import { BookOpen, Clock, Heart } from 'lucide-react';
+import { tagColor } from '../../lib/tags';
 
 interface BlogPost {
   id: string;
@@ -119,11 +120,7 @@ export default function FeedPage() {
                     {post.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {post.tags.slice(0, 3).map((tag) => (
-                          <span
-                            key={tag}
-                            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]"
-                          >
-                            <Tag size={10} />
+                          <span key={tag} className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium ${tagColor(tag)}`}>
                             {tag}
                           </span>
                         ))}

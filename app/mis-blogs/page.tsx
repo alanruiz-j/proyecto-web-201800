@@ -7,7 +7,9 @@ import { collection, getDocs, query, where, deleteDoc, doc } from 'firebase/fire
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase';
 import Card from '../../components/Card';
-import { BookOpen, Clock, Tag, Trash2, PenLine, Plus } from 'lucide-react';
+import ConfirmModal from '../../components/ConfirmModal';
+import { BookOpen, Clock, Trash2, PenLine, Plus } from 'lucide-react';
+import { tagColor } from '../../lib/tags';
 
 interface BlogPost {
   id: string;
@@ -18,6 +20,11 @@ interface BlogPost {
   createdAt: { seconds: number } | null;
 }
 
+interface ConfirmState {
+  message: string;
+  onConfirm: () => void;
+}
+
 export default function MisBlogsPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -25,6 +32,8 @@ export default function MisBlogsPage() {
   const [blogs, setBlogs] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -41,15 +50,8 @@ export default function MisBlogsPage() {
       try {
         const q = query(collection(db, 'blogs'), where('authorId', '==', user.uid));
         const snap = await getDocs(q);
-        const posts = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<BlogPost, 'id'>),
-        }));
-        posts.sort((a, b) => {
-          const at = a.createdAt?.seconds ?? 0;
-          const bt = b.createdAt?.seconds ?? 0;
-          return bt - at;
-        });
+        const posts = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<BlogPost, 'id'>) }));
+        posts.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
         setBlogs(posts);
       } catch (err) {
         console.error(err);
@@ -60,17 +62,23 @@ export default function MisBlogsPage() {
     fetchBlogs();
   }, [user]);
 
-  const handleDelete = async (blogId: string) => {
-    if (!confirm('¿Eliminar este blog? Esta acción no se puede deshacer.')) return;
-    setDeletingId(blogId);
-    try {
-      await deleteDoc(doc(db, 'blogs', blogId));
-      setBlogs((prev) => prev.filter((b) => b.id !== blogId));
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setDeletingId(null);
-    }
+  const handleDelete = (blogId: string) => {
+    setDeleteError('');
+    setConfirm({
+      message: '¿Eliminar este blog? Esta acción no se puede deshacer.',
+      onConfirm: async () => {
+        setDeletingId(blogId);
+        try {
+          await deleteDoc(doc(db, 'blogs', blogId));
+          setBlogs((prev) => prev.filter((b) => b.id !== blogId));
+        } catch (err) {
+          console.error(err);
+          setDeleteError('No se pudo eliminar el blog. Verifica los permisos de Firestore.');
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   };
 
   const formatDate = (ts: { seconds: number } | null) => {
@@ -92,6 +100,14 @@ export default function MisBlogsPage() {
 
   return (
     <main className="min-h-screen bg-[var(--background)] py-12 px-4">
+      {confirm && (
+        <ConfirmModal
+          message={confirm.message}
+          onConfirm={() => { confirm.onConfirm(); setConfirm(null); }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-10">
           <div className="flex items-center gap-3">
@@ -112,14 +128,18 @@ export default function MisBlogsPage() {
           </Link>
         </div>
 
+        {deleteError && (
+          <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm flex items-center justify-between">
+            {deleteError}
+            <button onClick={() => setDeleteError('')} className="ml-4 text-red-400 hover:text-red-600">✕</button>
+          </div>
+        )}
+
         {blogs.length === 0 ? (
           <div className="text-center py-20">
             <BookOpen size={48} className="mx-auto mb-4 text-[var(--muted-foreground)]" />
             <p className="text-lg text-[var(--muted-foreground)]">Aún no has publicado ningún blog.</p>
-            <Link
-              href="/publicar"
-              className="inline-block mt-4 text-[var(--primary)] underline text-sm"
-            >
+            <Link href="/publicar" className="inline-block mt-4 text-[var(--primary)] underline text-sm">
               Publica tu primer blog
             </Link>
           </div>
@@ -151,11 +171,7 @@ export default function MisBlogsPage() {
                 {post.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {post.tags.slice(0, 3).map((tag) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]"
-                      >
-                        <Tag size={10} />
+                      <span key={tag} className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium ${tagColor(tag)}`}>
                         {tag}
                       </span>
                     ))}
