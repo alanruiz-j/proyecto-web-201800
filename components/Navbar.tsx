@@ -5,7 +5,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Menu, X, LogOut, BookOpen, Heart } from 'lucide-react';
+import { Menu, X, LogOut, BookOpen, Heart } from 'lucide-react';
 import Button from './Button';
 import { auth, logOut } from '../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -85,17 +85,8 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {/* ── Buscador y botones de auth (solo en pantallas medianas y grandes) ── */}
+          {/* ── Botones de auth (solo en pantallas medianas y grandes) ── */}
           <div className="hidden md:flex items-center gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" size={18} />
-              <input
-                type="text"
-                placeholder="Buscar blogs..."
-                className="pl-10 pr-4 py-2 rounded-full bg-[var(--muted)] text-sm w-48 lg:w-64 focus:w-72 lg:focus:w-80 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-              />
-            </div>
-
             {/* Renderizado condicional: si está autenticado, mostrar dropdown; si no, botones de login */}
             {isAuthenticated ? (
               <div className="relative" ref={dropdownRef}>
@@ -168,14 +159,6 @@ export default function Navbar() {
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-t border-[var(--border)] px-4 py-4">
           <div className="flex flex-col gap-4">
-            <div className="relative mb-2">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" size={18} />
-              <input
-                type="text"
-                placeholder="Buscar blogs..."
-                className="w-full pl-10 pr-4 py-2 rounded-full bg-[var(--muted)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-              />
-            </div>
             <Link href="/feed" className="py-2 text-[var(--foreground)]">
               Feed
             </Link>
