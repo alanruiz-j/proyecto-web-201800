@@ -53,14 +53,11 @@ export default function Navbar() {
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
-            <Link href="/" className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
-              Explorar
+            <Link href="/feed" className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+              Feed
             </Link>
-            <Link href="/" className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
-              Comunidad
-            </Link>
-            <Link href="/" className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
-              Creadores
+            <Link href="/publicar" className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+              Publicar Blog
             </Link>
           </div>
 
@@ -129,14 +126,11 @@ export default function Navbar() {
                 className="w-full pl-10 pr-4 py-2 rounded-full bg-[var(--muted)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
               />
             </div>
-            <Link href="/" className="py-2 text-[var(--foreground)]">
-              Explorar
+            <Link href="/feed" className="py-2 text-[var(--foreground)]">
+              Feed
             </Link>
-            <Link href="/" className="py-2 text-[var(--foreground)]">
-              Comunidad
-            </Link>
-            <Link href="/" className="py-2 text-[var(--foreground)]">
-              Creadores
+            <Link href="/publicar" className="py-2 text-[var(--foreground)]">
+              Publicar Blog
             </Link>
             <div className="flex gap-3 pt-2 border-t border-[var(--border)]">
               {isAuthenticated ? (
