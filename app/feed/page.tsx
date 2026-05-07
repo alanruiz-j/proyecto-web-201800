@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   collection, getDocs,
-  doc, setDoc, deleteDoc,
+  doc, setDoc, deleteDoc, updateDoc, increment,
   serverTimestamp,
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -75,13 +75,37 @@ export default function FeedPage() {
 
   const toggleFavorite = async (blogId: string) => {
     if (!user) return;
+    const isFaved = favorites.has(blogId);
     const favRef = doc(db, 'users', user.uid, 'favorites', blogId);
-    if (favorites.has(blogId)) {
-      await deleteDoc(favRef);
+    const blogRef = doc(db, 'blogs', blogId);
+
+    // Optimistic update
+    if (isFaved) {
       setFavorites((prev) => { const s = new Set(prev); s.delete(blogId); return s; });
+      setBlogs((prev) => prev.map((b) => b.id === blogId ? { ...b, favoriteCount: Math.max(0, b.favoriteCount - 1) } : b));
     } else {
-      await setDoc(favRef, { blogId, addedAt: serverTimestamp() });
       setFavorites((prev) => new Set(prev).add(blogId));
+      setBlogs((prev) => prev.map((b) => b.id === blogId ? { ...b, favoriteCount: b.favoriteCount + 1 } : b));
+    }
+
+    try {
+      if (isFaved) {
+        await deleteDoc(favRef);
+        await updateDoc(blogRef, { favoriteCount: increment(-1) });
+      } else {
+        await setDoc(favRef, { blogId, addedAt: serverTimestamp() });
+        await updateDoc(blogRef, { favoriteCount: increment(1) });
+      }
+    } catch (err) {
+      console.error(err);
+      // Revertir en caso de error
+      if (isFaved) {
+        setFavorites((prev) => new Set(prev).add(blogId));
+        setBlogs((prev) => prev.map((b) => b.id === blogId ? { ...b, favoriteCount: b.favoriteCount + 1 } : b));
+      } else {
+        setFavorites((prev) => { const s = new Set(prev); s.delete(blogId); return s; });
+        setBlogs((prev) => prev.map((b) => b.id === blogId ? { ...b, favoriteCount: Math.max(0, b.favoriteCount - 1) } : b));
+      }
     }
   };
 
