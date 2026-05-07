@@ -12,10 +12,14 @@ export default function Navbar() {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setIsAuthenticated(!!user);
+      setUserName(user?.displayName ?? '');
+      setUserEmail(user?.email ?? '');
     });
     return unsubscribe;
   }, []);
@@ -78,7 +82,11 @@ export default function Navbar() {
                   Cuenta
                 </Button>
                 {dropdownOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-[var(--border)] py-2 z-50">
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-[var(--border)] py-2 z-50">
+                    <div className="px-4 py-3 border-b border-[var(--border)]">
+                      {userName && <p className="text-sm font-semibold text-[var(--foreground)] truncate">{userName}</p>}
+                      {userEmail && <p className="text-xs text-[var(--muted-foreground)] truncate">{userEmail}</p>}
+                    </div>
                     <button
                       onClick={handleLogout}
                       className="w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
@@ -132,13 +140,19 @@ export default function Navbar() {
             </Link>
             <div className="flex gap-3 pt-2 border-t border-[var(--border)]">
               {isAuthenticated ? (
-                <button
-                  onClick={handleLogout}
-                  className="w-full px-4 py-2 text-red-600 bg-red-50 rounded-full flex items-center justify-center gap-2 transition-colors"
-                >
-                  <LogOut size={16} />
-                  Cerrar Sesión
-                </button>
+                <div className="w-full flex flex-col gap-2">
+                  <div className="px-2 py-1">
+                    {userName && <p className="text-sm font-semibold text-[var(--foreground)] truncate">{userName}</p>}
+                    {userEmail && <p className="text-xs text-[var(--muted-foreground)] truncate">{userEmail}</p>}
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full px-4 py-2 text-red-600 bg-red-50 rounded-full flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <LogOut size={16} />
+                    Cerrar Sesión
+                  </button>
+                </div>
               ) : (
                 <>
                   <Link href="/login" className="flex-1">
