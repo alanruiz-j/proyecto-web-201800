@@ -1,11 +1,24 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Sparkles, PenTool, Users, ArrowRight } from 'lucide-react';
-import Link from 'next/link';
+import { Sparkles, PenTool, ArrowRight } from 'lucide-react';
 import Button from './Button';
+import { auth } from '../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 export default function Hero() {
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+    });
+    return unsubscribe;
+  }, []);
+
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-white to-[var(--muted)] py-12 sm:py-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -23,20 +36,25 @@ export default function Hero() {
               Comparte tus <span className="text-[var(--primary)]">historias</span> con el mundo
             </h1>
             <p className="text-lg sm:text-xl text-[var(--muted-foreground)] mb-8 max-w-lg">
-              Descubre historias increíblees de creadores de todo el mundo. Comparte tu voz y conecta con una comunidad apasionada por la lectura.
+              Descubre historias increíbles de creadores de todo el mundo. Comparte tu voz y conecta con una comunidad apasionada por la lectura.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/signup">
-                <Button size="lg" className="w-full sm:w-auto">
-                  Empezar a Escribir
-                  <ArrowRight className="ml-2" size={20} />
-                </Button>
-              </Link>
-              <Link href="/">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                  Explorar Historias
-                </Button>
-              </Link>
+              <Button
+                size="lg"
+                className="w-full sm:w-auto"
+                onClick={() => router.push(isAuthenticated ? '/publicar' : '/login')}
+              >
+                Empezar a Escribir
+                <ArrowRight className="ml-2" size={20} />
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full sm:w-auto"
+                onClick={() => router.push('/feed')}
+              >
+                Explorar Historias
+              </Button>
             </div>
           </motion.div>
 

@@ -146,23 +146,26 @@ export default function MisBlogsPage() {
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {blogs.map((post) => (
-              <Card key={post.id} hover={false} className="flex flex-col p-6 gap-3">
-                <div className="flex items-start justify-between gap-2">
-                  <Link
-                    href={`/feed/${post.id}`}
-                    className="text-lg font-bold text-[var(--foreground)] hover:text-[var(--primary)] transition-colors line-clamp-2"
-                  >
+              <Card
+                key={post.id}
+                hover={false}
+                className="relative flex flex-col p-6 gap-3 cursor-pointer"
+                onClick={() => router.push(`/feed/${post.id}`)}
+              >
+                <div className="flex items-start justify-between gap-2 pr-8">
+                  <span className="text-lg font-bold text-[var(--foreground)] hover:text-[var(--primary)] transition-colors line-clamp-2">
                     {post.title}
-                  </Link>
-                  <button
-                    onClick={() => handleDelete(post.id)}
-                    disabled={deletingId === post.id}
-                    className="shrink-0 p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                    title="Eliminar blog"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  </span>
                 </div>
+
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDelete(post.id); }}
+                  disabled={deletingId === post.id}
+                  className="absolute top-4 right-4 p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                  title="Eliminar blog"
+                >
+                  <Trash2 size={16} />
+                </button>
 
                 <p className="text-sm text-[var(--muted-foreground)] line-clamp-3 flex-1">
                   {post.body.slice(0, 200)}{post.body.length > 200 ? '…' : ''}

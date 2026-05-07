@@ -22,12 +22,12 @@ export default function TrendingTopics() {
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
-          className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide"
+          className="flex items-center gap-4 flex-wrap"
         >
           <span className="text-sm font-medium text-[var(--muted-foreground)] shrink-0">
-           Temas:
+            Temas:
           </span>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             {topics.map((topic, index) => (
               <motion.button
                 key={topic.name}
