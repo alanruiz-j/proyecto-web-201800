@@ -1,8 +1,11 @@
 'use client';
 
+// ── Imports ───────────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+// query y where permiten filtrar documentos de Firestore por un campo específico.
+// deleteDoc elimina un documento de Firestore dado su referencia.
 import { collection, getDocs, query, where, deleteDoc, doc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase';
@@ -11,6 +14,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { BookOpen, Clock, Trash2, PenLine, Plus } from 'lucide-react';
 import { tagColor } from '../../lib/tags';
 
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 interface BlogPost {
   id: string;
   title: string;
@@ -20,6 +24,7 @@ interface BlogPost {
   createdAt: { seconds: number } | null;
 }
 
+// ConfirmState guarda el mensaje y la acción del modal de confirmación actual.
 interface ConfirmState {
   message: string;
   onConfirm: () => void;
@@ -27,14 +32,19 @@ interface ConfirmState {
 
 export default function MisBlogsPage() {
   const router = useRouter();
+
+  // ── Estado ────────────────────────────────────────────────────────────────
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [blogs, setBlogs] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
+  // deletingId guarda el id del blog que se está eliminando para deshabilitar su botón.
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // confirm guarda los datos del modal actual; null significa que no hay modal abierto.
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [deleteError, setDeleteError] = useState('');
 
+  // ── Auth guard ────────────────────────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -44,13 +54,18 @@ export default function MisBlogsPage() {
     return unsubscribe;
   }, [router]);
 
+  // ── Fetch de blogs del usuario ────────────────────────────────────────────
   useEffect(() => {
+    // Este efecto depende de 'user'; si no hay usuario, no ejecutar nada.
     if (!user) return;
     const fetchBlogs = async () => {
       try {
+        // query + where filtra los blogs donde el campo 'authorId' coincide con el uid del usuario.
         const q = query(collection(db, 'blogs'), where('authorId', '==', user.uid));
         const snap = await getDocs(q);
+        // Combinar el id del documento con el resto de sus datos usando spread (...).
         const posts = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<BlogPost, 'id'>) }));
+        // Ordenar por fecha de creación: el más reciente primero.
         posts.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
         setBlogs(posts);
       } catch (err) {
@@ -60,16 +75,21 @@ export default function MisBlogsPage() {
       }
     };
     fetchBlogs();
-  }, [user]);
+  }, [user]); // Este efecto se vuelve a ejecutar cada vez que 'user' cambia
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleDelete = (blogId: string) => {
     setDeleteError('');
+    // Mostrar el modal de confirmación antes de eliminar.
+    // onConfirm es la función que se ejecutará si el usuario acepta.
     setConfirm({
       message: '¿Eliminar este blog? Esta acción no se puede deshacer.',
       onConfirm: async () => {
         setDeletingId(blogId);
         try {
+          // deleteDoc elimina el documento de Firestore de forma permanente.
           await deleteDoc(doc(db, 'blogs', blogId));
+          // Actualizar la lista local filtrando el blog eliminado (sin recargar la página).
           setBlogs((prev) => prev.filter((b) => b.id !== blogId));
         } catch (err) {
           console.error(err);
@@ -81,6 +101,7 @@ export default function MisBlogsPage() {
     });
   };
 
+  // Convierte el timestamp de Firestore (segundos desde epoch) a una fecha legible.
   const formatDate = (ts: { seconds: number } | null) => {
     if (!ts) return '';
     return new Date(ts.seconds * 1000).toLocaleDateString('es-MX', {
@@ -88,6 +109,7 @@ export default function MisBlogsPage() {
     });
   };
 
+  // ── Pantallas de carga y guard ────────────────────────────────────────────
   if (authLoading || (user && loading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -100,6 +122,7 @@ export default function MisBlogsPage() {
 
   return (
     <main className="min-h-screen bg-[var(--background)] py-12 px-4">
+      {/* El modal solo existe en el DOM cuando 'confirm' tiene datos (no es null) */}
       {confirm && (
         <ConfirmModal
           message={confirm.message}
@@ -116,6 +139,7 @@ export default function MisBlogsPage() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-[var(--foreground)]">Mis Blogs</h1>
+              {/* Pluralización dinámica: "publicación" vs "publicaciones" */}
               <p className="text-sm text-[var(--muted-foreground)]">{blogs.length} publicación{blogs.length !== 1 ? 'es' : ''}</p>
             </div>
           </div>
@@ -128,6 +152,7 @@ export default function MisBlogsPage() {
           </Link>
         </div>
 
+        {/* Mensaje de error de eliminación con botón para cerrarlo */}
         {deleteError && (
           <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm flex items-center justify-between">
             {deleteError}
@@ -135,6 +160,7 @@ export default function MisBlogsPage() {
           </div>
         )}
 
+        {/* Estado vacío: se muestra cuando el usuario no tiene ningún blog publicado */}
         {blogs.length === 0 ? (
           <div className="text-center py-20">
             <BookOpen size={48} className="mx-auto mb-4 text-[var(--muted-foreground)]" />
@@ -150,6 +176,7 @@ export default function MisBlogsPage() {
                 key={post.id}
                 hover={false}
                 className="relative flex flex-col p-6 gap-3 cursor-pointer"
+                // onClick navega al detalle del blog al hacer click en la card
                 onClick={() => router.push(`/feed/${post.id}`)}
               >
                 <div className="flex items-start justify-between gap-2 pr-8">
@@ -158,6 +185,7 @@ export default function MisBlogsPage() {
                   </span>
                 </div>
 
+                {/* e.stopPropagation() evita que el click en el botón active también el onClick de la card */}
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDelete(post.id); }}
                   disabled={deletingId === post.id}
@@ -173,6 +201,7 @@ export default function MisBlogsPage() {
 
                 {post.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1">
+                    {/* .slice(0, 3) muestra máximo 3 etiquetas para no sobrecargar la card */}
                     {post.tags.slice(0, 3).map((tag) => (
                       <span key={tag} className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium ${tagColor(tag)}`}>
                         {tag}

@@ -1,7 +1,10 @@
 'use client';
 
+// ── Imports ───────────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+// getDocs trae múltiples documentos; getDoc trae uno solo por su referencia.
+// deleteDoc elimina un documento de Firestore.
 import {
   collection, getDocs, doc, getDoc, deleteDoc,
 } from 'firebase/firestore';
@@ -11,6 +14,7 @@ import Card from '../../components/Card';
 import { Heart, Clock, BookOpen } from 'lucide-react';
 import { tagColor } from '../../lib/tags';
 
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 interface BlogPost {
   id: string;
   title: string;
@@ -22,12 +26,16 @@ interface BlogPost {
 
 export default function FavoritosPage() {
   const router = useRouter();
+
+  // ── Estado ────────────────────────────────────────────────────────────────
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [blogs, setBlogs] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
+  // removingId guarda el id del blog que se está quitando de favoritos.
   const [removingId, setRemovingId] = useState<string | null>(null);
 
+  // ── Auth guard ────────────────────────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -37,21 +45,29 @@ export default function FavoritosPage() {
     return unsubscribe;
   }, [router]);
 
+  // ── Fetch de favoritos ────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const fetchFavorites = async () => {
       try {
+        // Los favoritos de cada usuario se guardan en una subcolección: users/{uid}/favorites.
+        // getDocs trae todos los documentos de esa subcolección.
         const favSnap = await getDocs(collection(db, 'users', user.uid, 'favorites'));
+        // El id de cada documento favorito es el id del blog correspondiente.
         const blogIds = favSnap.docs.map((d) => d.id);
 
+        // Promise.all ejecuta múltiples peticiones a Firestore en paralelo.
+        // Es más rápido que esperarlas una por una.
         const blogDocs = await Promise.all(
           blogIds.map((id) => getDoc(doc(db, 'blogs', id)))
         );
 
+        // .filter((d) => d.exists()) descarta blogs que fueron eliminados pero siguen en favoritos.
         const posts = blogDocs
           .filter((d) => d.exists())
           .map((d) => ({ id: d.id, ...(d.data() as Omit<BlogPost, 'id'>) }));
 
+        // Ordenar por fecha de creación: el más reciente primero.
         posts.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
         setBlogs(posts);
       } catch (err) {
@@ -63,11 +79,14 @@ export default function FavoritosPage() {
     fetchFavorites();
   }, [user]);
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleRemoveFavorite = async (blogId: string) => {
     if (!user) return;
     setRemovingId(blogId);
     try {
+      // Eliminar el documento de la subcolección de favoritos del usuario.
       await deleteDoc(doc(db, 'users', user.uid, 'favorites', blogId));
+      // Quitar el blog de la lista local sin recargar la página.
       setBlogs((prev) => prev.filter((b) => b.id !== blogId));
     } catch (err) {
       console.error(err);
@@ -83,6 +102,7 @@ export default function FavoritosPage() {
     });
   };
 
+  // ── Pantallas de carga y guard ────────────────────────────────────────────
   if (authLoading || (user && loading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -106,6 +126,7 @@ export default function FavoritosPage() {
           </div>
         </div>
 
+        {/* Estado vacío: se muestra cuando no hay blogs favoritos */}
         {blogs.length === 0 ? (
           <div className="text-center py-20">
             <BookOpen size={48} className="mx-auto mb-4 text-[var(--muted-foreground)]" />
@@ -147,6 +168,7 @@ export default function FavoritosPage() {
                   <span className="ml-auto font-medium">{post.authorName}</span>
                 </div>
 
+                {/* e.stopPropagation() evita que el click active el onClick de la card */}
                 <button
                   onClick={(e) => { e.stopPropagation(); handleRemoveFavorite(post.id); }}
                   disabled={removingId === post.id}

@@ -1,20 +1,31 @@
 'use client';
 
+// ── Imports ───────────────────────────────────────────────────────────────────
+// useEffect ejecuta código después de que el componente aparece en pantalla.
+// useState guarda un valor que, al cambiar, vuelve a renderizar el componente.
 import { useEffect, useState } from 'react';
+// Link de Next.js hace navegación entre páginas sin recargar toda la página.
 import Link from 'next/link';
 import { auth } from '../lib/firebase';
+// onAuthStateChanged escucha en tiempo real si el usuario inicia o cierra sesión.
 import { onAuthStateChanged } from 'firebase/auth';
 
 export default function Footer() {
+  // new Date().getFullYear() obtiene el año actual para el copyright dinámico.
   const currentYear = new Date().getFullYear();
+
+  // ── Estado de autenticación ───────────────────────────────────────────────
+  // false = usuario no autenticado por defecto; se actualiza cuando Firebase responde.
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
+    // Suscribirse a cambios de sesión. Cada vez que el usuario entra o sale, se actualiza isAuthenticated.
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user);
+      setIsAuthenticated(!!user); // !! convierte el objeto user en true o false
     });
+    // Al desmontar el componente, cancelamos la suscripción para evitar fugas de memoria.
     return unsubscribe;
-  }, []);
+  }, []); // [] significa que este efecto solo corre una vez al montar el componente
 
   return (
     <footer className="bg-[var(--foreground)] text-white py-10">
@@ -47,6 +58,7 @@ export default function Footer() {
               <ul className="space-y-2">
                 <li><Link href="/mis-blogs" className="text-white/60 hover:text-white transition-colors text-sm">Mis Blogs</Link></li>
                 <li><Link href="/favoritos" className="text-white/60 hover:text-white transition-colors text-sm">Favoritos</Link></li>
+                {/* Solo mostramos Login/Signup si el usuario NO ha iniciado sesión */}
                 {!isAuthenticated && (
                   <>
                     <li><Link href="/login" className="text-white/60 hover:text-white transition-colors text-sm">Iniciar Sesión</Link></li>
@@ -59,6 +71,7 @@ export default function Footer() {
         </div>
 
         <div className="pt-6 border-t border-white/10">
+          {/* {currentYear} inserta el año actual automáticamente en el texto */}
           <p className="text-white/40 text-sm text-center">
             © {currentYear} BlogHub. Todos los derechos reservados.
           </p>
