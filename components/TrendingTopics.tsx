@@ -25,7 +25,7 @@ export default function TrendingTopics() {
           className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide"
         >
           <span className="text-sm font-medium text-[var(--muted-foreground)] shrink-0">
-           Temas Populares:
+           Temas:
           </span>
           <div className="flex gap-3">
             {topics.map((topic, index) => (
