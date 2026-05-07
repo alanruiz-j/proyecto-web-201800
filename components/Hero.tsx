@@ -1,7 +1,10 @@
 'use client';
 
+// ── Imports ───────────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react';
+// useRouter permite navegar a otra página programáticamente (sin que el usuario haga click en un Link).
 import { useRouter } from 'next/navigation';
+// motion es un componente de Framer Motion que agrega animaciones fluidas.
 import { motion } from 'framer-motion';
 import { Sparkles, PenTool, ArrowRight } from 'lucide-react';
 import Button from './Button';
@@ -9,20 +12,29 @@ import { auth } from '../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
 export default function Hero() {
+  // useRouter devuelve un objeto con métodos para navegar entre páginas.
   const router = useRouter();
+
+  // ── Estado de autenticación ───────────────────────────────────────────────
+  // false = no autenticado por defecto; se actualiza cuando Firebase responde.
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
+    // Escuchar cambios de sesión en tiempo real para saber si el usuario está logueado.
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setIsAuthenticated(!!user);
     });
-    return unsubscribe;
+    return unsubscribe; // Cancelar la suscripción al desmontar el componente
   }, []);
 
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-white to-[var(--muted)] py-12 sm:py-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* grid divide la sección en 2 columnas en pantallas grandes */}
         <div className="grid lg:grid-cols-2 gap-12 items-center">
+
+          {/* ── Columna izquierda: texto y botones ──────────────────────────── */}
+          {/* initial/animate definen la animación de entrada: aparece deslizándose desde la izquierda */}
           <motion.div
             initial={{ opacity: 0, x: -50 }}
             animate={{ opacity: 1, x: 0 }}
@@ -39,6 +51,7 @@ export default function Hero() {
               Descubre historias increíbles de creadores de todo el mundo. Comparte tu voz y conecta con una comunidad apasionada por la lectura.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
+              {/* El destino del botón cambia según si el usuario ya inició sesión o no */}
               <Button
                 size="lg"
                 className="w-full sm:w-auto"
@@ -58,6 +71,8 @@ export default function Hero() {
             </div>
           </motion.div>
 
+          {/* ── Columna derecha: tarjeta decorativa ─────────────────────────── */}
+          {/* delay: 0.2 hace que esta columna aparezca 0.2s después que la izquierda */}
           <motion.div
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
@@ -65,6 +80,7 @@ export default function Hero() {
             className="relative hidden lg:block"
           >
             <div className="relative w-full max-w-md mx-auto">
+              {/* blur-3xl crea un efecto de resplandor de fondo */}
               <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/20 to-[var(--secondary)]/20 rounded-3xl blur-3xl" />
               <div className="relative bg-white rounded-3xl shadow-2xl p-6 border border-[var(--border)]">
                 <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[var(--border)]">
@@ -76,6 +92,7 @@ export default function Hero() {
                     <p className="text-sm text-[var(--muted-foreground)]">Comenzando</p>
                   </div>
                 </div>
+                {/* Bloques grises simulan líneas de texto (skeleton loader decorativo) */}
                 <div className="space-y-3">
                   <div className="h-4 bg-[var(--muted)] rounded w-3/4" />
                   <div className="h-4 bg-[var(--muted)] rounded w-1/2" />

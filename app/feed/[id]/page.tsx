@@ -1,8 +1,12 @@
 'use client';
 
+// ── Imports ───────────────────────────────────────────────────────────────────
+// 'use' desenvuelve una Promise; aquí lo usamos para leer los params de la URL dinámica.
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+// arrayUnion agrega un valor a un array en Firestore sin duplicados.
+// arrayRemove quita un valor específico de un array en Firestore.
 import {
   doc, getDoc, setDoc, deleteDoc, collection, getDocs, addDoc,
   updateDoc, arrayUnion, arrayRemove, orderBy, query, serverTimestamp, increment,
@@ -16,6 +20,7 @@ import {
   Trash2, EyeOff, Eye, ThumbsUp, ThumbsDown, Heart,
 } from 'lucide-react';
 
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 interface BlogPost {
   title: string;
   body: string;
@@ -32,21 +37,27 @@ interface Comment {
   authorId: string;
   authorName: string;
   hidden: boolean;
+  // likedBy y dislikedBy son arrays de uids que votaron por el comentario.
   likedBy: string[];
   dislikedBy: string[];
   createdAt: { seconds: number } | null;
 }
 
+// ConfirmState guarda el mensaje y la acción del modal de confirmación activo.
 interface ConfirmState {
   message: string;
   onConfirm: () => void;
 }
 
+// params llega como Promise porque Next.js resuelve los params de forma asíncrona en App Router.
 export default function BlogDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  // use(params) extrae el valor del id sin necesidad de useEffect + useState.
   const { id } = use(params);
   const router = useRouter();
 
+  // ── Estado ────────────────────────────────────────────────────────────────
   const [post, setPost] = useState<BlogPost | null>(null);
+  // favoriteCount se guarda separado para poder actualizarlo sin recargar todo el post.
   const [favoriteCount, setFavoriteCount] = useState(0);
   const [comments, setComments] = useState<Comment[]>([]);
   const [user, setUser] = useState<User | null>(null);
@@ -60,19 +71,23 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
   const [pageError, setPageError] = useState('');
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
+  // ── Efectos ───────────────────────────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return unsubscribe;
   }, []);
 
   useEffect(() => {
+    // Cuando cambia el usuario, verificar si este blog ya está en sus favoritos.
     if (!user) { setIsFavorite(false); return; }
+    // getDoc trae un solo documento; .exists() verifica si el documento existe.
     getDoc(doc(db, 'users', user.uid, 'favorites', id)).then((snap) => {
       setIsFavorite(snap.exists());
     });
   }, [user, id]);
 
   useEffect(() => {
+    // Cargar el post y los comentarios cuando el componente se monta.
     const fetchPost = async () => {
       try {
         const snap = await getDoc(doc(db, 'blogs', id));
@@ -90,9 +105,11 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
 
     const fetchComments = async () => {
       try {
+        // query + orderBy trae los comentarios ordenados por fecha de creación.
         const q = query(collection(db, 'blogs', id, 'comments'), orderBy('createdAt', 'asc'));
         const snap = await getDocs(q);
         setComments(snap.docs.map((d) => {
+          // Desestructurar con valores por defecto para campos que podrían no existir.
           const { likedBy = [], dislikedBy = [], hidden = false, ...rest } = d.data() as Omit<Comment, 'id'>;
           return { id: d.id, likedBy, dislikedBy, hidden, ...rest };
         }));
@@ -103,10 +120,13 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
 
     fetchPost();
     fetchComments();
-  }, [id]);
+  }, [id]); // Se vuelve a ejecutar si el id de la URL cambia
 
+  // ── Verificaciones de autoría ─────────────────────────────────────────────
+  // isAuthor es true solo si el usuario logueado es el autor del blog.
   const isAuthor = !!(user && post && user.uid === post.authorId);
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleToggleFavorite = async () => {
     if (!user) return;
     const favRef = doc(db, 'users', user.uid, 'favorites', id);
@@ -114,8 +134,10 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
     try {
       if (isFavorite) {
         await deleteDoc(favRef);
+        // increment(-1) resta 1 al campo favoriteCount en Firestore de forma atómica.
         await updateDoc(blogRef, { favoriteCount: increment(-1) });
         setIsFavorite(false);
+        // (n) => ... usa la función de actualización para asegurar el valor más reciente.
         setFavoriteCount((n) => Math.max(0, n - 1));
       } else {
         await setDoc(favRef, { blogId: id, addedAt: serverTimestamp() });
@@ -130,13 +152,14 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   const handleDeleteBlog = () => {
+    // Mostrar modal de confirmación antes de borrar el blog.
     setConfirm({
       message: '¿Eliminar este blog? Esta acción no se puede deshacer.',
       onConfirm: async () => {
         setDeletingBlog(true);
         try {
           await deleteDoc(doc(db, 'blogs', id));
-          router.push('/feed');
+          router.push('/feed'); // Redirigir al feed después de eliminar
         } catch (err) {
           console.error(err);
           setActionError('No se pudo eliminar el blog. Verifica los permisos de Firestore.');
@@ -151,7 +174,9 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
       message: '¿Eliminar este comentario?',
       onConfirm: async () => {
         try {
+          // Los comentarios son una subcolección dentro del blog: blogs/{id}/comments/{commentId}
           await deleteDoc(doc(db, 'blogs', id, 'comments', commentId));
+          // Filtrar el comentario eliminado del estado local.
           setComments((prev) => prev.filter((c) => c.id !== commentId));
         } catch (err) {
           console.error(err);
@@ -163,7 +188,9 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
 
   const handleToggleHidden = async (comment: Comment) => {
     try {
+      // Alternar el campo 'hidden' del comentario en Firestore.
       await updateDoc(doc(db, 'blogs', id, 'comments', comment.id), { hidden: !comment.hidden });
+      // Actualizar el estado local sin recargar todos los comentarios.
       setComments((prev) =>
         prev.map((c) => (c.id === comment.id ? { ...c, hidden: !c.hidden } : c))
       );
@@ -180,8 +207,10 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
     const hasDisliked = comment.dislikedBy.includes(uid);
     const commentRef = doc(db, 'blogs', id, 'comments', comment.id);
 
+    // Construir el objeto de actualización según el tipo de voto y el estado actual.
     let updates: Record<string, unknown>;
     if (vote === 'like') {
+      // Si ya le dio like, quitarlo; si no, agregarlo y quitar dislike si lo tenía.
       updates = hasLiked
         ? { likedBy: arrayRemove(uid) }
         : { likedBy: arrayUnion(uid), dislikedBy: arrayRemove(uid) };
@@ -193,6 +222,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
 
     try {
       await updateDoc(commentRef, updates);
+      // Actualizar el estado local reflejando el nuevo voto.
       setComments((prev) =>
         prev.map((c) => {
           if (c.id !== comment.id) return c;
@@ -231,9 +261,11 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
         dislikedBy: [] as string[],
         createdAt: serverTimestamp(),
       };
+      // addDoc agrega el comentario como nuevo documento en la subcolección comments.
       const ref = await addDoc(collection(db, 'blogs', id, 'comments'), data);
+      // Agregar el comentario al estado local inmediatamente (createdAt = null hasta que Firestore responda).
       setComments((prev) => [...prev, { id: ref.id, ...data, createdAt: null }]);
-      setNewComment('');
+      setNewComment(''); // Limpiar el textarea después de publicar
     } catch (err) {
       console.error(err);
       setCommentError('No se pudo publicar el comentario.');
@@ -243,22 +275,28 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   const formatDate = (ts: { seconds: number } | null) => {
+    // Si no hay timestamp aún (comentario recién creado), mostrar texto provisional.
     if (!ts) return 'Justo ahora';
     return new Date(ts.seconds * 1000).toLocaleDateString('es-MX', {
       year: 'numeric', month: 'long', day: 'numeric',
     });
   };
 
+  // netVotes calcula la puntuación neta de un comentario (likes - dislikes).
   const netVotes = (c: Comment) => c.likedBy.length - c.dislikedBy.length;
 
+  // ── Ordenar comentarios ───────────────────────────────────────────────────
+  // Los comentarios visibles se ordenan por puntuación neta; los ocultos van al final.
   const visibleComments = comments
     .filter((c) => !c.hidden)
     .sort((a, b) => {
       const diff = netVotes(b) - netVotes(a);
+      // Si tienen el mismo score, ordenar por fecha de creación (más antiguo primero).
       return diff !== 0 ? diff : (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0);
     });
   const sortedComments = [...visibleComments, ...comments.filter((c) => c.hidden)];
 
+  // ── Pantallas de carga y error ────────────────────────────────────────────
   if (loadingPost) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -278,6 +316,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
 
   return (
     <main className="min-h-screen bg-[var(--background)] py-12 px-4">
+      {/* El modal se monta solo cuando 'confirm' tiene datos */}
       {confirm && (
         <ConfirmModal
           message={confirm.message}
@@ -302,10 +341,12 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         )}
 
+        {/* ── Artículo principal ────────────────────────────────────────── */}
         <article className="bg-white rounded-2xl shadow-md border border-[var(--border)] p-8 mb-8">
           <div className="flex items-start justify-between gap-4 mb-4">
             <h1 className="text-3xl font-bold text-[var(--foreground)]">{post!.title}</h1>
             <div className="flex items-center gap-2 shrink-0">
+              {/* Botón de favorito solo visible para usuarios autenticados */}
               {user && (
                 <button
                   onClick={handleToggleFavorite}
@@ -320,6 +361,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
                   <span>{favoriteCount}</span>
                 </button>
               )}
+              {/* Botón de eliminar solo visible para el autor del blog */}
               {isAuthor && (
                 <button
                   onClick={handleDeleteBlog}
@@ -350,11 +392,13 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
             )}
           </div>
 
+          {/* whitespace-pre-wrap respeta los saltos de línea del texto guardado en Firestore */}
           <div className="prose prose-slate max-w-none text-[var(--foreground)] leading-relaxed whitespace-pre-wrap">
             {post!.body}
           </div>
         </article>
 
+        {/* ── Sección de comentarios ─────────────────────────────────────── */}
         <section className="bg-white rounded-2xl shadow-md border border-[var(--border)] p-8">
           <h2 className="text-xl font-bold text-[var(--foreground)] mb-6 flex items-center gap-2">
             <MessageCircle size={20} />
@@ -372,6 +416,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
               return (
                 <div
                   key={c.id}
+                  // Los comentarios ocultos tienen apariencia atenuada para distinguirlos
                   className={`p-4 rounded-xl border ${
                     c.hidden ? 'bg-gray-50 border-gray-200 opacity-60' : 'bg-[var(--muted)] border-[var(--border)]'
                   }`}
@@ -391,6 +436,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
                   </p>
 
                   <div className="flex items-center gap-3 mt-3">
+                    {/* Botones de like/dislike; deshabilitados si el usuario no está logueado */}
                     <button
                       onClick={() => handleVote(c, 'like')}
                       disabled={!user}
@@ -415,6 +461,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
                     </button>
 
                     <div className="ml-auto flex gap-3">
+                      {/* Solo el autor del blog puede ocultar/mostrar comentarios */}
                       {isAuthor && (
                         <button
                           onClick={() => handleToggleHidden(c)}
@@ -424,6 +471,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
                           {c.hidden ? 'Mostrar' : 'Ocultar'}
                         </button>
                       )}
+                      {/* Solo el autor del comentario puede eliminarlo */}
                       {user && user.uid === c.authorId && (
                         <button
                           onClick={() => handleDeleteComment(c.id)}
@@ -440,6 +488,8 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
             })}
           </div>
 
+          {/* ── Formulario de nuevo comentario ──────────────────────────── */}
+          {/* Solo se muestra si el usuario está logueado */}
           {user ? (
             <div className="flex flex-col gap-3">
               <textarea
@@ -452,6 +502,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
               {commentError && <p className="text-red-500 text-xs">{commentError}</p>}
               <button
                 onClick={handleComment}
+                // Deshabilitar si ya está publicando o si el textarea está vacío
                 disabled={submitting || !newComment.trim()}
                 className="self-end inline-flex items-center gap-2 px-5 py-2 rounded-full bg-[var(--primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
               >
@@ -460,6 +511,7 @@ export default function BlogDetailPage({ params }: { params: Promise<{ id: strin
               </button>
             </div>
           ) : (
+            // Si no hay sesión, invitar al usuario a iniciarla para poder comentar.
             <p className="text-sm text-[var(--muted-foreground)]">
               <Link href="/login" className="text-[var(--primary)] underline">Inicia sesión</Link> para votar y comentar.
             </p>

@@ -1,7 +1,13 @@
+// ── Imports de Firebase ───────────────────────────────────────────────────────
+// Firebase es el servicio de Google que usamos para autenticación y base de datos.
+// Importamos solo los módulos que necesitamos (tree-shaking: reduce el tamaño del bundle).
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
+// ── Credenciales ──────────────────────────────────────────────────────────────
+// Las claves se leen desde variables de entorno (.env.local) para no exponerlas
+// en el código fuente. NEXT_PUBLIC_ hace que Next.js las envíe al navegador.
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -12,11 +18,22 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
+// initializeApp conecta la aplicación con el proyecto Firebase usando las credenciales.
 const app = initializeApp(firebaseConfig);
+
+// auth maneja todo lo relacionado con usuarios: registro, login y sesión activa.
 export const auth = getAuth(app);
+
+// db es la instancia de Firestore, la base de datos donde guardamos blogs y comentarios.
 export const db = getFirestore(app);
+
+// googleProvider configura el inicio de sesión con cuenta de Google (OAuth 2.0).
 export const googleProvider = new GoogleAuthProvider();
 
+// ── Funciones de autenticación ────────────────────────────────────────────────
+
+// Abre una ventana emergente para que el usuario elija su cuenta de Google.
+// async/await permite esperar la respuesta sin bloquear el resto de la app.
 export const signInWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
@@ -27,6 +44,7 @@ export const signInWithGoogle = async () => {
   }
 };
 
+// Cierra la sesión del usuario actual y borra su estado en Firebase Auth.
 export const logOut = async () => {
   try {
     await signOut(auth);

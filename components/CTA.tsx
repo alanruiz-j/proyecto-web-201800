@@ -9,16 +9,23 @@ import { auth } from '../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
 export default function CTA() {
+  // null = aún no sabemos si hay sesión; true/false = ya lo sabemos.
+  // Empezar en null evita mostrar la sección un instante antes de saber el estado real.
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
+    // onAuthStateChanged escucha cambios en la sesión en tiempo real.
+    // Llama al callback cada vez que el usuario inicia o cierra sesión.
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user);
+      setIsAuthenticated(!!user); // !! convierte el objeto user en true/false
     });
+    // Retornar unsubscribe detiene la escucha cuando el componente se desmonta,
+    // evitando actualizaciones de estado en componentes que ya no existen.
     return unsubscribe;
-  }, []);
+  }, []); // [] significa que este efecto solo corre una vez al montar el componente
 
-  // No renderizar hasta saber el estado de auth (evita flash)
+  // Si aún no sabemos el estado de auth, o el usuario ya inició sesión: no renderizar nada.
+  // Retornar null en React es la forma de no mostrar ningún elemento.
   if (isAuthenticated === null || isAuthenticated) return null;
 
   return (

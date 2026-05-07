@@ -1,12 +1,18 @@
 'use client';
 
+// ── Imports ───────────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+// addDoc agrega un nuevo documento a una colección en Firestore.
+// serverTimestamp() genera la marca de tiempo del servidor (más confiable que Date.now()).
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+// User es el tipo de TypeScript que representa a un usuario de Firebase Auth.
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase';
 import { PenLine, Code, Heart, Music, Camera, Plane, Utensils, Book, Gamepad2 } from 'lucide-react';
 
+// ── Etiquetas disponibles ─────────────────────────────────────────────────────
+// Cada etiqueta tiene nombre, ícono, colores inactivo y activo (cuando está seleccionada).
 const PREDEFINED_TAGS = [
   { name: 'Tecnología', icon: Code, color: 'bg-blue-100 text-blue-600 border-blue-200', activeColor: 'bg-blue-500 text-white border-blue-500' },
   { name: 'Estilo de Vida', icon: Heart, color: 'bg-pink-100 text-pink-600 border-pink-200', activeColor: 'bg-pink-500 text-white border-pink-500' },
@@ -20,31 +26,43 @@ const PREDEFINED_TAGS = [
 
 export default function PublicarPage() {
   const router = useRouter();
+
+  // ── Estado de autenticación ───────────────────────────────────────────────
+  // user guarda el objeto del usuario logueado (null si no hay sesión).
   const [user, setUser] = useState<User | null>(null);
+  // authLoading evita renderizar el formulario antes de saber si hay sesión.
   const [authLoading, setAuthLoading] = useState(true);
 
+  // ── Estado del formulario ─────────────────────────────────────────────────
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  // ── Auth guard ────────────────────────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
+      // Si no hay usuario autenticado, redirigir al login automáticamente.
+      // router.replace no agrega la página actual al historial, así no puede volver con "atrás".
       if (!u) router.replace('/login');
     });
     return unsubscribe;
   }, [router]);
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  // Agrega o quita una etiqueta del array según si ya estaba seleccionada.
   const toggleTag = (name: string) => {
     setTags((prev) =>
+      // Si el tag ya está en el array, lo filtra (quita); si no, lo agrega con spread (...).
       prev.includes(name) ? prev.filter((t) => t !== name) : [...prev, name]
     );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    // e.preventDefault() evita que el formulario recargue la página al enviarlo.
     e.preventDefault();
     if (!title.trim() || !body.trim()) {
       setError('El título y el cuerpo son obligatorios.');
@@ -53,15 +71,16 @@ export default function PublicarPage() {
     setSubmitting(true);
     setError('');
     try {
+      // addDoc crea un nuevo documento en la colección 'blogs' con los datos del formulario.
       await addDoc(collection(db, 'blogs'), {
         title: title.trim(),
         body: body.trim(),
         tags,
-        authorId: user!.uid,
+        authorId: user!.uid,       // uid es el identificador único del usuario en Firebase
         authorName: user!.displayName || user!.email || 'Anónimo',
-        createdAt: serverTimestamp(),
+        createdAt: serverTimestamp(), // guarda la fecha exacta del servidor, no del cliente
       });
-      router.push('/feed');
+      router.push('/feed'); // Navegar al feed después de publicar exitosamente
     } catch (err) {
       console.error(err);
       setError('No se pudo publicar el blog. Intenta de nuevo.');
@@ -69,6 +88,8 @@ export default function PublicarPage() {
     }
   };
 
+  // ── Pantallas de carga y guard ────────────────────────────────────────────
+  // Mostrar spinner mientras se verifica la sesión
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -77,6 +98,7 @@ export default function PublicarPage() {
     );
   }
 
+  // null en React significa "no renderizar nada"; el useEffect ya redirigió al login
   if (!user) return null;
 
   return (
@@ -92,9 +114,11 @@ export default function PublicarPage() {
           </div>
         </div>
 
+        {/* onSubmit llama a handleSubmit cuando el usuario presiona el botón de envío */}
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-md border border-[var(--border)] p-8 flex flex-col gap-6">
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-[var(--foreground)]">Título</label>
+            {/* onChange actualiza el estado 'title' cada vez que el usuario escribe */}
             <input
               type="text"
               value={title}
@@ -107,6 +131,7 @@ export default function PublicarPage() {
 
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-[var(--foreground)]">Cuerpo</label>
+            {/* textarea permite texto multilínea; resize-y permite al usuario ajustar la altura */}
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
@@ -125,13 +150,16 @@ export default function PublicarPage() {
               </span>
             </label>
             <div className="flex flex-wrap gap-2">
+              {/* .map() renderiza un botón por cada etiqueta disponible */}
               {PREDEFINED_TAGS.map(({ name, icon: Icon, color, activeColor }) => {
                 const selected = tags.includes(name);
                 return (
+                  // type="button" evita que estos botones activen el submit del formulario
                   <button
                     key={name}
                     type="button"
                     onClick={() => toggleTag(name)}
+                    // Cambia las clases de color según si la etiqueta está seleccionada o no
                     className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium transition-all ${
                       selected ? activeColor : color
                     }`}
@@ -144,10 +172,12 @@ export default function PublicarPage() {
             </div>
           </div>
 
+          {/* El mensaje de error solo se muestra cuando la variable 'error' no está vacía */}
           {error && <p className="text-red-500 text-sm">{error}</p>}
 
           <button
             type="submit"
+            // disabled bloquea el botón mientras se está publicando para evitar envíos dobles
             disabled={submitting}
             className="w-full py-3 rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
           >
